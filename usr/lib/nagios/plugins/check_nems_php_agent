@@ -1,0 +1,249 @@
+#!/usr/bin/env php
+<?php
+
+/*
+
+  check_nems_php_agent
+  Written by Robbie Ferguson for NEMS Linux
+  -----
+  1.2 - December 10, 2020 - Network usage now uses ifstat and generates a more
+                            accurate average usage number based on all network
+                            interfaces on the server with a 5 second average.
+                            New agent will only run the equations and tests
+                            for the requested check. For example, don't run
+                            a 5 second network bandwidth test when the requested
+                            check is for the load average. Fixed bug where nettx
+                            was in fact reporting netrx.
+  1.1 - November 19, 2020 - Key is now encrypted (not just base64 encoded)
+                            Added "." disk feature to load stats on the web dir
+                            Several bug fixes for disk and var feature
+                            Added output for open_basedir permissions problem
+  1.0 - July 29, 2019 - Initial release 
+
+*/
+
+  $nemsagentver = '1.2';
+
+  if (count($argv) >=5) {
+    array_shift($argv);
+    $data['warn'] = intval(array_shift($argv));
+    $data['crit'] = intval(array_shift($argv));
+    $data['url'] = trim(array_shift($argv));
+    $data['check'] = trim(array_shift($argv));
+  } else {
+    exit_usage();
+  }
+
+  $php_agent_key = '';
+  $nemsconffile = '/usr/local/share/nems/nems.conf'; // www-admin must have access to read/write
+  $conf = file($nemsconffile);
+  if (is_array($conf)) { // Load the existing conf data
+        foreach ($conf as $line) {
+                $tmp = explode('=',$line);
+                if (trim($tmp[0]) == 'php_agent_key') $php_agent_key = trim($tmp[1]);
+        }
+  }
+  if ($php_agent_key == '') {
+    echo 'UNKNOWN - Missing passphrase. Did you set one in NEMS SST?';
+    exit(3);
+  }
+
+  $decryptionkey = openssl_encrypt($php_agent_key,"AES-128-ECB",base64_encode(':' . $php_agent_key . ':'));
+
+  // Set connection timeout
+    $timeout = 5;
+
+  // Get the remote header
+    $ch = curl_init();
+    curl_setopt($ch, CURLOPT_HEADER, true);
+    curl_setopt($ch, CURLOPT_URL, $data['url']);
+    curl_setopt($ch, CURLOPT_POST, TRUE);
+    $postfields = array('check'=>$data['check']);
+    curl_setopt($ch, CURLOPT_POSTFIELDS,$postfields);
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1);
+    curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, $timeout);
+    curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
+    $response = curl_exec($ch);
+    $httpcode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+
+  // Stop if header is anything other than 'found'
+    if ($httpcode != 200) {
+      echo 'UNKNOWN - NEMS PHP Server Agent not found at provided URL (' . $httpcode . ').';
+      exit(3);
+    }
+
+  // Get the remote response
+    curl_setopt($ch, CURLOPT_HEADER, false);
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1);
+    $response = curl_exec($ch);
+    curl_close($ch);
+
+  $data['response'] = json_decode($response);
+  if (!is_object($data['response'])) {
+    echo 'UNKNOWN - Invalid response from nems-agent.php at that URL.';
+    exit(3);
+  }
+
+  $nemsver = shell_exec('/usr/local/bin/nems-info nemsver');
+
+  $authLocal = hash('sha256', $decryptionkey);
+
+  if ($authLocal != $data['response']->auth) {
+    echo 'UNKNOWN - Local PHP Agent encryption passphrase differs from remote.';
+    exit(3);
+  }
+
+  // Decrypt the data
+    $data['response']->data = json_decode(openssl_decrypt($data['response']->data,"AES-128-ECB",$decryptionkey));
+
+  // Make sure it decrypted okay
+    if (!is_object($data['response']->data)) {
+      echo 'UNKNOWN - Invalid decrypted response from nems-agent.php at that URL.';
+      exit(3);
+    }
+
+  // Run the checks against the received data
+    switch ($data['check']) {
+
+      case 'load':
+        if ($data['response']->data->cpu->loadaverage->{15} > $data['crit']) {
+          echo 'CRITICAL - 15 Minute Load Average: ' . $data['response']->data->cpu->loadaverage->{15};
+          exit(2);
+        } else if ($data['response']->data->cpu->loadaverage->{15} > $data['warn']) {
+          echo 'WARN - 15 Minute Load Average: ' . $data['response']->data->cpu->loadaverage->{15};
+          exit(1);
+        } else {
+          echo 'OK - 15 Minute Load Average: ' . $data['response']->data->cpu->loadaverage->{15};
+          exit(0);
+        }
+        break;
+
+      case 'mem':
+        if ($data['response']->data->mem->percent > $data['crit']) {
+          echo 'CRITICAL - Memory Usage: ' . $data['response']->data->mem->percent . '%';
+          exit(2);
+        } else if ($data['response']->data->mem->percent > $data['warn']) {
+          echo 'WARN - Memory Usage: ' . $data['response']->data->mem->percent . '%';
+          exit(1);
+        } else {
+          echo 'OK - Memory Usage: ' . $data['response']->data->mem->percent . '%';
+          exit(0);
+        }
+        break;
+
+      case '.':
+        $mountpoint = '.';
+        if (!isset($data['response']->data->storage->$mountpoint->locked)) {
+          if ($data['response']->data->storage->$mountpoint->percent > $data['crit']) {
+            echo 'CRITICAL - Disk Usage ' . $data['response']->data->storage->$mountpoint->percent . '% (' . $data['response']->data->storage->$mountpoint->path . ')';
+            exit(2);
+          } else if ($data['response']->data->storage->$mountpoint->percent > $data['warn']) {
+            echo 'WARN - Disk Usage ' . $data['response']->data->storage->$mountpoint->percent . '% (' . $data['response']->data->storage->$mountpoint->path . ')';
+            exit(1);
+          } else {
+            echo 'OK - Disk Usage ' . $data['response']->data->storage->$mountpoint->percent . '% (' . $data['response']->data->storage->$mountpoint->path . ')';
+            exit(0);
+          }
+        } else {
+          echo "UNKNOWN - open_basedir in effect: Cannot access $mountpoint";
+          exit(3);
+        }
+        break;
+
+      case '/':
+        $mountpoint = '/';
+        if (!isset($data['response']->data->storage->$mountpoint->locked)) {
+          if ($data['response']->data->storage->$mountpoint->percent > $data['crit']) {
+            echo 'CRITICAL - Disk Usage ' . $data['response']->data->storage->$mountpoint->percent . '% (' . $mountpoint . ')';
+            exit(2);
+          } else if ($data['response']->data->storage->$mountpoint->percent > $data['warn']) {
+            echo 'WARN - Disk Usage ' . $data['response']->data->storage->$mountpoint->percent . '% (' . $mountpoint . ')';
+            exit(1);
+          } else {
+            echo 'OK - Disk Usage ' . $data['response']->data->storage->$mountpoint->percent . '% (' . $mountpoint . ')';
+            exit(0);
+          }
+        } else {
+          echo "UNKNOWN - open_basedir in effect: Cannot access $mountpoint";
+          exit(3);
+        }
+        break;
+
+      case 'var':
+        $mountpoint = '/var';
+        if (!isset($data['response']->data->storage->$mountpoint->locked)) {
+          if ($data['response']->data->storage->$mountpoint->percent > $data['crit']) {
+            echo 'CRITICAL - Disk Usage ' . $data['response']->data->storage->$mountpoint->percent . '% (' . $mountpoint . ')';
+            exit(2);
+          } else if ($data['response']->data->storage->$mountpoint->percent > $data['warn']) {
+            echo 'WARN - Disk Usage ' . $data['response']->data->storage->$mountpoint->percent . '% (' . $mountpoint . ')';
+            exit(1);
+          } else {
+            echo 'OK - Disk Usage ' . $data['response']->data->storage->$mountpoint->percent . '% (' . $mountpoint . ')';
+            exit(0);
+          }
+        } else {
+          echo "UNKNOWN - open_basedir in effect: Cannot access $mountpoint";
+          exit(3);
+        }
+        break;
+
+      case 'net':
+        if (isset($data['response']->data->network->none)) {
+          echo "UNKNOWN - You need to install ifstat on remote server";
+          exit(3);
+        }
+        if ($data['response']->data->network->total->rx > $data['crit'] || $data['response']->data->network->total->tx > $data['crit']) {
+          echo 'CRITICAL - Network: ' . $data['response']->data->network->total->rx . ' Mb/s Down / ' . $data['response']->data->network->total->tx . ' Mb/s Up';
+          exit(2);
+        } else if ($data['response']->data->network->total->rx > $data['warn'] || $data['response']->data->network->total->tx > $data['warn']) {
+          echo 'WARN - Network: ' . $data['response']->data->network->total->rx . ' Mb/s Down / ' . $data['response']->data->network->total->tx . ' Mb/s Up';
+          exit(1);
+        } else {
+          echo 'OK - Network: ' . $data['response']->data->network->total->rx . ' Mb/s Down / ' . $data['response']->data->network->total->tx . ' Mb/s Up';
+          exit(0);
+        }
+        break;
+
+      case 'netrx':
+        if ($data['response']->data->network->total->rx > $data['crit']) {
+          echo 'CRITICAL - Network: ' . $data['response']->data->network->total->rx . ' Mb/s Down';
+          exit(2);
+        } else if ($data['response']->data->network->total->rx > $data['warn']) {
+          echo 'WARN - Network: ' . $data['response']->data->network->total->rx . ' Mb/s Down';
+          exit(1);
+        } else {
+          echo 'OK - Network: ' . $data['response']->data->network->total->rx . ' Mb/s Down';
+          exit(0);
+        }
+        break;
+
+      case 'nettx':
+        if ($data['response']->data->network->total->tx > $data['crit']) {
+          echo 'CRITICAL - Network: ' . $data['response']->data->network->total->tx . ' Mb/s Up';
+          exit(2);
+        } else if ($data['response']->data->network->total->tx > $data['warn']) {
+          echo 'WARN - Network: ' . $data['response']->data->network->total->tx . ' Mb/s Up';
+          exit(1);
+        } else {
+          echo 'OK - Network: ' . $data['response']->data->network->total->tx . ' Mb/s Up';
+          exit(0);
+        }
+        break;
+
+      default:
+        exit_usage();
+        break;
+
+    }
+
+
+function exit_usage() {
+  global $argv;
+    echo 'NEMS PHP Server Agent Check' . PHP_EOL;
+    echo PHP_EOL . 'Usage: ' . $argv[0] . ' warn crit url [mem|disk|var|.|net|netrx|nettx|load]' . PHP_EOL;
+    echo 'Example: ' . $argv[0] . ' 3 9 https://example.com/nems-agent.php load' . PHP_EOL . PHP_EOL;
+    exit(3);
+}
+
+print_r($data);

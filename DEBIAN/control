@@ -1,0 +1,10 @@
+Package: nems-plugins
+Essential: yes
+Priority: required
+Section: main
+Maintainer: NEMS Linux <nems@category5.tv>
+Architecture: all
+Version: 1.6.020
+Provides: nems-plugins
+Description: NEMS Plugins for check commands within NEMS Linux
+Depends: fuse, owfs, libow-perl, libnagios-plugin-perl, openjdk-11-jre-headless, curl, jq, bc

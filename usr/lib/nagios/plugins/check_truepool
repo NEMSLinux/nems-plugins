@@ -1,0 +1,96 @@
+#!/bin/bash
+# Check Truepool.io Chia Pool v1.2
+# Ensure your Chia farm is online and farming to the pool
+# By Robbie Ferguson // https://nemslinux.com/
+
+# Depends: jq curl
+
+if [ -z "$1" ] ; then
+    echo "UNKNOWN - missing Launcher ID"
+    exit 3
+fi
+
+if ! ( command -v jq >/dev/null ) ; then
+    echo "UNKNOWN - jq command not found"
+    exit 3
+fi
+
+if ! ( command -v curl >/dev/null ) ; then
+    echo "UNKNOWN - curl command not found"
+    exit 3
+fi
+
+# Get the launcher id from the CLI
+launcher=$1
+
+# Load the json API data for this launcher
+api="https://truepool.io/api/v1.0/launcher/"
+resp=$(curl -s "${api}${launcher}/")
+
+# Save the json response to a log so we can compare our results at next run
+if [[ -e /tmp/truepool.${launcher}.json ]]; then
+  resp_prev=$(cat /tmp/truepool.${launcher}.json)
+  points_prev=$(echo $resp_prev | jq -r '.points')
+  # Load the share from the previous data just in case the pool found a block
+  share_prev=$(echo $resp_prev | jq -r '.share_pplns')
+  share_percent_prev=$(echo "scale=2;${share_prev}*100" | bc)
+else
+  points_prev=0 # First run, so we want any value to be greater than previous value, so set to 0
+fi
+
+# Load the current stats from JSON response
+points=$(echo $resp | jq -r '.points')
+points_pplns=$(echo $resp | jq -r '.points_pplns')
+difficulty=$(echo $resp | jq -r '.difficulty')
+detail=$(echo $resp | jq -r '.detail')
+share=$(echo $resp | jq -r '.share_pplns')
+share_percent=$(echo "scale=2;${share}*100" | bc)
+name=$(echo $resp | jq -r '.name')
+
+# jq uses 'null' instead of 0, so correct it
+if [[ $points == "null" ]]; then
+  points=0
+fi
+if [[ $points_pplns == "null" ]]; then
+  points_pplns=0
+fi
+if [[ $difficulty == "null" ]]; then
+  difficulty=0
+fi
+
+if [[ $points > $points_prev ]]; then
+    echo $resp > /tmp/truepool.${launcher}.json
+    o_points=$(printf "%'d" $points)
+    o_points_pplns=$(printf "%'d" $points_pplns)
+    o_share=$(printf "%.4f" $share_percent)
+    echo "OK - Points: $o_points_pplns (24 hrs), $points (this block) / Share: ${o_share}% / Diff: $difficulty"
+    exit 0
+elif [[ $points < $points_prev ]]; then
+    echo $resp > /tmp/truepool.${launcher}.json
+    # The points value has decreased, meaning it was reset
+    # This occurs when the pool has won a reward and reset the launcher's points following payout
+    o_share_prev=$(printf "%.4f" $share_percent_prev)
+    echo "OK - Chia Block Found! Share: ${o_share_prev}%"
+    exit 0
+elif [[ $detail != 'null' ]]; then
+  echo "CRITICAL - $detail"
+  exit 2
+else
+  # A bit of trickery: If the user is running the check too often it would cause a false CRITICAL state
+  # since the user won't be farming as fast as their checks. IF that happens, just reset the previous
+  # point cache value for 5 minutes to allow an accurate result. This means for UP TO 5 minutes, the state
+  # could say OK while it could in fact be offline, but that is a reasonable sacrifice to ensure the most
+  # accurate possible results. Will append [Cache] to the output to notify user of this.
+  if [[ -e /tmp/truepool.${launcher}.json ]]; then
+    if ! test `find "/tmp/truepool.${launcher}.json" -mmin +5`
+    then
+      o_points=$(printf "%'d" $points)
+      o_points_pplns=$(printf "%'d" $points_pplns)
+      o_share=$(printf "%.4f" $share_percent)
+      echo "OK - Points: $o_points_pplns (24 hrs), $points (this block) / Share: ${o_share}% / Diff: $difficulty [Cache]"
+      exit 0
+    fi
+  fi
+  echo "CRITICAL - Chia farm is offline."
+  exit 2
+fi

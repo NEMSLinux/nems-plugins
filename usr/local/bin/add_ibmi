@@ -1,0 +1,43 @@
+#!/bin/bash
+echo
+echo "NEMS Linux IBM i Host/SST credential add tool"
+echo
+echo "This tool adds the credentials for your IBM i Host/SST so you can"
+echo "begin monitoring it with NEMS Linux. Note, you will still need to"
+echo "add the host to NEMS NConf as normal."
+echo
+if [[ $EUID -ne 0 ]]; then
+  echo "ERROR: You need to use sudo $0" 2>&1
+  exit 1
+else
+
+echo "Note: You need to make sure to set the password level of the Dedicated Service Tools (DST)
+to level 2 in SST of your monitored system. You could change this password level by:
+STRSST -> Option 8: Work with Service Tools Server Security and Devices -> Option 4: Change
+service tools password level. And after this change, you need to change the password of SST
+user again in order to get the new password level to take effect."
+echo
+echo "1 - Host"
+echo "2 - SST"
+echo "[Enter] to Abort"
+echo
+read -r -p "Your Choice? [1|2] " choice
+echo ""
+if [[ $choice == 1 ]]; then
+  /usr/lib/nagios/plugins/ibmi/host_config.sh -i host
+elif [[ $choice == 2 ]]; then
+  /usr/lib/nagios/plugins/ibmi/host_config.sh -i sst
+else
+  echo "Aborted."
+  exit 1
+fi
+echo
+if ! grep -q "service.ibmi=1" "/usr/local/share/nems/nems.conf"; then
+  echo "IMPORTANT: You must enable the IBM i Service in NEMS System Settings Tool."
+  echo
+fi
+
+fi
+
+# Why we need sudo
+chown -R nagios:nagios /usr/local/nagios

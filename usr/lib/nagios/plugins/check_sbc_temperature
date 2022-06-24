@@ -1,0 +1,85 @@
+#!/bin/bash
+# author: Andrea Cattaneo
+# check raspberry pi cpu temperature with perfdata and warn/crit thresholds
+#
+# check raspberry pi temperature with perfdata and warn/crit thresholds.
+# The data is read from sysfs ( file: /sys/class/thermal/thermal_zone0/temp ).
+#
+# Dependency: awk bc
+# licence: GPL
+#
+# Revised by Robbie Ferguson for NEMS Linux
+
+if [[ -e /var/log/nems ]]; then
+  platform=$(/usr/local/bin/nems-info platform)
+else
+  platform=98000
+fi
+
+if [ -z "$1" ] ; then
+    echo "UNKNOWN - missing warning temperature"
+    exit 3
+fi
+WARN=$1
+
+if [ -z "$2" ] ; then
+    echo "UNKNOWN - missing critical temperature"
+    exit 3
+fi
+CRIT=$2
+
+if ! ( command -v awk >/dev/null ) ; then
+    echo "UNKNOWN - awk command not found"
+    exit 3
+fi
+
+if ! ( command -v bc >/dev/null ) ; then
+    echo "UNKNOWN - bc command not found"
+    exit 3
+fi
+
+if (( $platform == 20 )); then
+  echo "UNKNOWN - Virtual Appliance cannot provide thermal data"
+  exit 3
+fi
+
+if [[ -e /var/log/nems ]]; then
+  if ! [[ -f /sys/class/thermal/thermal_zone0/temp ]] ; then
+    echo "UNKNOWN - Thermal sensor doesn't exist"
+    exit 3
+  fi
+fi
+
+#TEMP=`awk '{printf "%3.1f", $1/1000}' /sys/class/thermal/thermal_zone0/temp`
+# nems-info does a better job and detects if it is millidegree Celsius (eg., RPi) or just Celsius (eg., PINE64).
+if [[ -e /var/log/nems ]]; then
+  TEMP=`/usr/local/bin/nems-info temperature`
+else
+  sensors=`which sensors`
+  if [[ ! $sensors == '' ]]; then
+    TEMP=`sensors | grep Core | tr '+°C' ' ' | awk '{print $3}' | head -n 1`
+  fi
+  if [[ $TEMP == '' ]] && [[ -e /sys/class/thermal/thermal_zone0/temp ]]; then
+    # this is a dirty way to try to figure it out since it doesn't tell which temp unit we're using... but it may help on some systems... can improve it later
+    TEMP=`awk '{printf "%3.1f", $1/1000}' /sys/class/thermal/thermal_zone0/temp`
+  fi
+  if [[ $TEMP == '' ]]; then
+    echo "UNKNOWN - Thermal sensor doesn't exist or lm-sensors not installed"
+    exit 3
+  fi
+fi
+
+TEMPF=$(echo "scale=2;((9/5) * ${TEMP}) + 32" |bc)
+
+if (( $(echo "${TEMP} > ${CRIT}" | bc -l) )); then
+    echo "TEMPERATURE CRITICAL - CPU Temp: ${TEMP} °C / ${TEMPF} °F | cpu_temp=${TEMP};${WARN};${CRIT};;"
+    exit 2
+fi
+
+if (( $(echo "${TEMP} > ${WARN}" | bc -l) )); then
+    echo "TEMPERATURE WARNING - CPU Temp: ${TEMP} °C / ${TEMPF} °F | cpu_temp=${TEMP};${WARN};${CRIT};;"
+    exit 1
+fi
+
+echo "TEMPERATURE OK - CPU Temp: ${TEMP} °C / ${TEMPF} °F | cpu_temp=${TEMP};${WARN};${CRIT};;"
+exit 0
