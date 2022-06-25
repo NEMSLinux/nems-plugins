@@ -11,7 +11,7 @@ Based Upon:
 
 Reworked for NEMS Linux by Robbie Ferguson
  https://nemslinux.com
- Build: 1
+ Build: 2
 
 Used, modified and distributed in NEMS Linux
 with special permission from Heini Holm Andersen.
@@ -56,6 +56,8 @@ $f_max_host_attempt_state= array_shift($argv);  /*20*/
 $f_all_recipients= array_shift($argv);  /*21*/
 
 $f_date_year = date("Y");
+
+if (strlen($f_notify_type) == 0) exit('Please see the documentation.' . PHP_EOL);
 
 /* Load from NEMS Config */
 $nems['alias'] = trim(shell_exec('/usr/local/bin/nems-info alias'));
@@ -541,6 +543,10 @@ $mail->AltBody = $message;
 $mail->Body = $HTMLmessage;
 
 if(!$mail->send()) {
+
+        $plaintext = '[' . date('r') . '] ' . ($f_notify_type_friendly ?: $f_notify_type).': '.$f_host_name.' is '.$f_host_state . PHP_EOL;
+        file_put_contents('/tmp/email_failure.tmp',$plaintext,FILE_APPEND); // Save failed sends to this log so we can re-send them later
+
 	echo 'Message could not be sent.' . PHP_EOL;
 	echo 'Mailer Error: ' . $mail->ErrorInfo . PHP_EOL;
 	$error = '[' . strtotime('now') . '] NEMS EMAILER: ' . $mail->ErrorInfo . PHP_EOL;

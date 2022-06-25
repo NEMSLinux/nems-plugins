@@ -10,7 +10,7 @@ Based Upon:
 
 Reworked for NEMS Linux by Robbie Ferguson
  https://nemslinux.com
- Build: 3
+ Build: 4
 
 Used, modified and distributed in NEMS Linux
 with special permission from Heini Holm Andersen.
@@ -58,6 +58,8 @@ $f_notification_escalation_state= array_shift($argv);     /*23*/
 $f_service_attempt_state= array_shift($argv);     /*24*/
 $f_max_service_attempt_state= array_shift($argv);     /*25*/
 $f_all_recipients= array_shift($argv);  /*26*/
+
+if (strlen($f_notify_type) == 0) exit('Please see the documentation.' . PHP_EOL);
 
 /* Data posted from NEMS SST */
 $json_switch=array_shift($argv);  /*27*/
@@ -622,6 +624,10 @@ $mail->AltBody = $message;
 $mail->Body = $HTMLmessage;
 
 if(!$mail->send()) {
+
+  $plaintext = '[' . date('r') . '] ' . ($f_notify_type_friendly ?: $f_notify_type).': '.$f_serv_desc.' on '.$f_host_name.' is '.$f_serv_state . PHP_EOL;
+  file_put_contents('/tmp/email_failure.tmp',$plaintext,FILE_APPEND); // Save failed sends to this log so we can re-send them later
+
   if ($json_output == 0) {
         echo 'Message could not be sent.' . PHP_EOL;
 	echo 'Mailer Error: ' . $mail->ErrorInfo . PHP_EOL;

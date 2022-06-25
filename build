@@ -7,7 +7,6 @@ if [[ $EUID == 0 ]]; then
   exit 1
 fi
 
-cd ../all
 dpkg-deb --build debpack ${package}.deb
 mv ${package}.deb /srv/repos/apt/nems/
 cd /srv/repos/apt/nems/
