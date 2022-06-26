@@ -556,6 +556,19 @@ if(!$mail->send()) {
         }
 } else {
 	echo 'Message has been sent' . PHP_EOL;
+	if (file_exists('/tmp/email_failure.tmp')) {
+          echo 'Sending email of previous failed notifications... ';
+          $email_failures = file_get_contents('/tmp/email_failure.tmp');
+          $email_failure_created = filectime('/tmp/email_failure.tmp');
+          $mail->AltBody = $nems['alias'] . ' has been unable to send email since ' . date('r', $email_failure_created) . '. Here are the notifications that attempted to send since that time:' . PHP_EOL . PHP_EOL . $email_failures;
+          $mail->Body = '<b>' . $nems['alias'] . '</b> has been unable to send email since ' . date('r', $email_failure_created) . '. Here are the notifications that attempted to send since that time:<br /><br />' . nl2br($email_failures);
+	  if ($mail-send()) {
+            echo 'Success.' . PHP_EOL;
+            unlink('/tmp/email_failure.tmp'); // Sent, so we'll delete this temporary file.
+          } else {
+            echo 'Failed to send.' . PHP_EOL;
+          }
+        }
 }
 
 ?>
