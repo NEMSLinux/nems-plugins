@@ -6,23 +6,30 @@
   check_nems_php_agent
   Written by Robbie Ferguson for NEMS Linux
   -----
-  1.2 - December 10, 2020 - Network usage now uses ifstat and generates a more
-                            accurate average usage number based on all network
-                            interfaces on the server with a 5 second average.
-                            New agent will only run the equations and tests
-                            for the requested check. For example, don't run
-                            a 5 second network bandwidth test when the requested
-                            check is for the load average. Fixed bug where nettx
-                            was in fact reporting netrx.
-  1.1 - November 19, 2020 - Key is now encrypted (not just base64 encoded)
-                            Added "." disk feature to load stats on the web dir
-                            Several bug fixes for disk and var feature
-                            Added output for open_basedir permissions problem
-  1.0 - July 29, 2019 - Initial release 
+  1.4 - Jul 17, 2022 - Improve disk checking by allowing user to specify the
+                       location to check. This can be / for the root disk,
+                       . for the running folder of the PHP agent, /var or even
+                       a mountpoint such as /mnt/backup
+
+  1.2 - Dec 10, 2020 - Network usage now uses ifstat and generates a more
+                       accurate average usage number based on all network
+                       interfaces on the server with a 5 second average.
+                       New agent will only run the equations and tests
+                       for the requested check. For example, don't run
+                       a 5 second network bandwidth test when the requested
+                       check is for the load average. Fixed bug where nettx
+                       was in fact reporting netrx.
+
+  1.1 - Nov 19, 2020 - Key is now encrypted (not just base64 encoded)
+                       Added "." disk feature to load stats on the web dir
+                       Several bug fixes for disk and var feature
+                       Added output for open_basedir permissions problem
+
+  1.0 - Jul 29, 2019 - Initial release
 
 */
 
-  $nemsagentver = '1.2';
+  $nemsagentver = '1.3';
 
   if (count($argv) >=5) {
     array_shift($argv);
@@ -30,6 +37,7 @@
     $data['crit'] = intval(array_shift($argv));
     $data['url'] = trim(array_shift($argv));
     $data['check'] = trim(array_shift($argv));
+    $data['switch'] = trim(array_shift($argv)); // a final switch variable
   } else {
     exit_usage();
   }
@@ -58,7 +66,7 @@
     curl_setopt($ch, CURLOPT_HEADER, true);
     curl_setopt($ch, CURLOPT_URL, $data['url']);
     curl_setopt($ch, CURLOPT_POST, TRUE);
-    $postfields = array('check'=>$data['check']);
+    $postfields = array('check'=>$data['check'],'switch'=>$data['switch']);
     curl_setopt($ch, CURLOPT_POSTFIELDS,$postfields);
     curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1);
     curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, $timeout);
@@ -131,46 +139,9 @@
         }
         break;
 
-      case '.':
-        $mountpoint = '.';
-        if (!isset($data['response']->data->storage->$mountpoint->locked)) {
-          if ($data['response']->data->storage->$mountpoint->percent > $data['crit']) {
-            echo 'CRITICAL - Disk Usage ' . $data['response']->data->storage->$mountpoint->percent . '% (' . $data['response']->data->storage->$mountpoint->path . ')';
-            exit(2);
-          } else if ($data['response']->data->storage->$mountpoint->percent > $data['warn']) {
-            echo 'WARN - Disk Usage ' . $data['response']->data->storage->$mountpoint->percent . '% (' . $data['response']->data->storage->$mountpoint->path . ')';
-            exit(1);
-          } else {
-            echo 'OK - Disk Usage ' . $data['response']->data->storage->$mountpoint->percent . '% (' . $data['response']->data->storage->$mountpoint->path . ')';
-            exit(0);
-          }
-        } else {
-          echo "UNKNOWN - open_basedir in effect: Cannot access $mountpoint";
-          exit(3);
-        }
-        break;
-
-      case '/':
+      case 'disk':
         $mountpoint = '/';
-        if (!isset($data['response']->data->storage->$mountpoint->locked)) {
-          if ($data['response']->data->storage->$mountpoint->percent > $data['crit']) {
-            echo 'CRITICAL - Disk Usage ' . $data['response']->data->storage->$mountpoint->percent . '% (' . $mountpoint . ')';
-            exit(2);
-          } else if ($data['response']->data->storage->$mountpoint->percent > $data['warn']) {
-            echo 'WARN - Disk Usage ' . $data['response']->data->storage->$mountpoint->percent . '% (' . $mountpoint . ')';
-            exit(1);
-          } else {
-            echo 'OK - Disk Usage ' . $data['response']->data->storage->$mountpoint->percent . '% (' . $mountpoint . ')';
-            exit(0);
-          }
-        } else {
-          echo "UNKNOWN - open_basedir in effect: Cannot access $mountpoint";
-          exit(3);
-        }
-        break;
-
-      case 'var':
-        $mountpoint = '/var';
+        if (isset($data['switch']) && strlen($data['switch']) > 0) $mountpoint = $data['switch'];
         if (!isset($data['response']->data->storage->$mountpoint->locked)) {
           if ($data['response']->data->storage->$mountpoint->percent > $data['crit']) {
             echo 'CRITICAL - Disk Usage ' . $data['response']->data->storage->$mountpoint->percent . '% (' . $mountpoint . ')';

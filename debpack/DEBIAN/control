@@ -1,7 +1,7 @@
 Package: nems-plugins
 Essential: yes
 Priority: required
-Section: main
+Section: plugins
 Maintainer: NEMS Linux <nems@category5.tv>
 Architecture: all
 Version: 1.6.022
