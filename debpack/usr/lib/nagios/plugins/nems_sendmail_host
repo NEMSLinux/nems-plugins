@@ -11,7 +11,7 @@ Based Upon:
 
 Reworked for NEMS Linux by Robbie Ferguson
  https://nemslinux.com
- Build: 2
+ Build: 5
 
 Used, modified and distributed in NEMS Linux
 with special permission from Heini Holm Andersen.
@@ -228,7 +228,6 @@ $HTMLmessage = '
     <![endif]-->
 
     <!--[if !mso]><!-->
-        <link href="https://font.internet.fo/stylesheet.css" rel="stylesheet" type="text/css">
         <link href="https://fonts.googleapis.com/css?family=Open+Sans" rel="stylesheet">
     <!--<![endif]-->
 
