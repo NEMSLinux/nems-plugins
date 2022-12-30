@@ -6,6 +6,10 @@
   check_nems_php_agent
   Written by Robbie Ferguson for NEMS Linux
   -----
+  1.5 - Aug 16, 2022 - If a disk check is performed and the target disk is not
+                       mounted, give CRIT rather than parent disk usage.
+                       Suppress CLI errors.
+
   1.4 - Jul 17, 2022 - Improve disk checking by allowing user to specify the
                        location to check. This can be / for the root disk,
                        . for the running folder of the PHP agent, /var or even
@@ -29,7 +33,7 @@
 
 */
 
-  $nemsagentver = '1.3';
+  $nemsagentver = '1.5';
 
   if (count($argv) >=5) {
     array_shift($argv);
@@ -44,6 +48,9 @@
 
   $php_agent_key = '';
   $nemsconffile = '/usr/local/share/nems/nems.conf'; // www-admin must have access to read/write
+  if (!file_exists($nemsconffile)) {
+    die('NEMS Linux is required to execute this command.' . PHP_EOL);
+  }
   $conf = file($nemsconffile);
   if (is_array($conf)) { // Load the existing conf data
         foreach ($conf as $line) {
@@ -142,20 +149,25 @@
       case 'disk':
         $mountpoint = '/';
         if (isset($data['switch']) && strlen($data['switch']) > 0) $mountpoint = $data['switch'];
-        if (!isset($data['response']->data->storage->$mountpoint->locked)) {
-          if ($data['response']->data->storage->$mountpoint->percent > $data['crit']) {
-            echo 'CRITICAL - Disk Usage ' . $data['response']->data->storage->$mountpoint->percent . '% (' . $mountpoint . ')';
+        if (isset($data['response']->data->storage->$mountpoint->mounted) && $data['response']->data->storage->$mountpoint->mounted == 0) {
+            echo 'CRITICAL - NOT MOUNTED (' . $mountpoint . ')';
             exit(2);
-          } else if ($data['response']->data->storage->$mountpoint->percent > $data['warn']) {
-            echo 'WARN - Disk Usage ' . $data['response']->data->storage->$mountpoint->percent . '% (' . $mountpoint . ')';
-            exit(1);
-          } else {
-            echo 'OK - Disk Usage ' . $data['response']->data->storage->$mountpoint->percent . '% (' . $mountpoint . ')';
-            exit(0);
-          }
         } else {
-          echo "UNKNOWN - open_basedir in effect: Cannot access $mountpoint";
-          exit(3);
+          if (!isset($data['response']->data->storage->$mountpoint->locked)) {
+            if ($data['response']->data->storage->$mountpoint->percent > $data['crit']) {
+              echo 'CRITICAL - Disk Usage ' . $data['response']->data->storage->$mountpoint->percent . '% (' . $mountpoint . ')';
+              exit(2);
+            } else if ($data['response']->data->storage->$mountpoint->percent > $data['warn']) {
+              echo 'WARN - Disk Usage ' . $data['response']->data->storage->$mountpoint->percent . '% (' . $mountpoint . ')';
+              exit(1);
+            } else {
+              echo 'OK - Disk Usage ' . $data['response']->data->storage->$mountpoint->percent . '% (' . $mountpoint . ')';
+              exit(0);
+            }
+          } else {
+            echo "UNKNOWN - open_basedir in effect: Cannot access $mountpoint";
+            exit(3);
+          }
         }
         break;
 
