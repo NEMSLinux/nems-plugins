@@ -1,0 +1,2 @@
+openjdk-11-jre-headless for Buster
+openjdk-17-jre-headless for Bookworm
