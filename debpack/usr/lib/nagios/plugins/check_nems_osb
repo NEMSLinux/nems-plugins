@@ -5,22 +5,29 @@
   check_nems_osb - Version 1.1
   Written by Robbie Ferguson for NEMS Linux
   -----
+  1.2 - July 12, 2023 - Report if the cloudauth command returns an offline response (NCS did not respond).
+                        Improved state reporting (fixed some issues with the Migrator log to improve this).
   1.1 - May 21, 2021 - Remove the state output. Let NEMS use exit codes.
   1.0 - December 8, 2020 - Initial release
 
 */
   $auth=shell_exec('/usr/local/bin/nems-info cloudauth');
-  if ($auth == 0) {
+  if ($auth == 3) {
+    // Offline State
+    echo 'NEMS Cloud Services not responding (Internet down?).';
+    exit(2);
+  } else if ($auth == 0) {
     // UNKNOWN State
     echo 'NEMS Cloud Services not authorized.';
     exit(3);
   }
+
   $osb_log = '/var/log/nems/nems-osb.log';
   if (file_exists($osb_log)) {
     $log = explode('::',shell_exec('tail -n 1 ' . $osb_log));
     if ($log[1] == 2) {
       // CRITICAL State
-      echo 'OSB ' . $log[2] . ': ' . $log[3];
+      echo 'OSB ' . $log[2] . ': ' . trim($log[3]) . ' (' . date('l M j, Y g:i A',strtotime($log[0])) . ')';
       exit(2);
     } else if ($log[1] == 1 && strtotime($log[0]) < strtotime('-2 days')) {
       // WARNING State
@@ -30,9 +37,17 @@
       // OK State
       echo 'OSB ' . $log[2] . ' (' . date('l M j, Y',strtotime($log[0])) . ')';
       exit(0);
+    } else if ($log[1] == '3') {
+      // UNKNOWN State
+      echo 'Unknown Error (' . date('l M j, Y',strtotime($log[0])) . ')';
+      exit(3);
     }
   } else {
-    echo 'NEMS OSB has not run.';
-    exit(3);  
+    echo 'NEMS OSB has not yet run.';
+    exit(3);
   }
+
+  echo ''; // Ensure something is output if we get to this point.
+  exit(3);
+
 ?>
