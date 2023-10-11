@@ -117,11 +117,12 @@ sub ping_16_server {
 
     my $header      = "";
     my $protocol    = "";
+    my $version     = "";
     my $motd        = "";
     my $players     = 0;
     my $max_players = 0;
 
-    ($header, $protocol, $motd, $players, $max_players) = split /\x{00}/, $resp;
+    ($header, $protocol, $version, $motd, $players, $max_players) = split /\x{00}/, $resp;
 
     # If max_players does not have a valid value, server is down, or invalid response was received
     if ($max_players < 1) { print "DOWN|ResponseTime="; printf "%5.3fs\n", $elapsed; exit(2); }
