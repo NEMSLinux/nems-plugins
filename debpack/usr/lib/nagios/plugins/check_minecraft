@@ -53,7 +53,7 @@ if (1) {
   }
 }
 
-print "DOWN|"; printf "%5.3fs\n", 0;
+print "DOWN";
 exit(2);
 
 exit(0);
