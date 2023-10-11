@@ -126,13 +126,13 @@ sub ping_16_server {
     ($header, $protocol, $version, $motd, $players, $max_players) = split /\x{00}/, $resp;
 
     # If max_players does not have a valid value, server is down, or invalid response was received
-    if ($max_players < 1) { print "DOWN|ResponseTime="; printf "%5.3fs\n", $elapsed; exit(2); }
+    if ($max_players < 1) { print "DOWN"; exit(2); }
 
     # If server is full, exit with warning level
-    if ($players eq $max_players) { print "FULL - " . $players . "/" . $max_players . " players|Players=" . $players . ";" . floor($max_players*.75) . ";" . floor($max_players*.9) . ";0;" . $max_players . "|Version=" . $version . "|ResponseTime="; printf "%5.3fs\n", $elapsed; exit(1); }
+    if ($players eq $max_players) { print "FULL - " . $players . "/" . $max_players . " players|'Online Players'=" . $players . ";" . floor($max_players*.75) . ";" . floor($max_players*.9) . ";0;" . $max_players . " 'Minecraft Version'='" . $version . "' 'Response Time'="; printf "%5.3fs\n", $elapsed; exit(1); }
 
     # If server is not full, exit with good value
-    if ($players < $max_players) { print "Online - " . $players . "/" . $max_players . " players|Players=" . $players . ";" . floor($max_players*.75) . ";" . floor($max_players*.9) . ";0;" . $max_players . "|Version=" . $version . "|ResponseTime="; printf "%5.3fs\n", $elapsed; exit(0); }
+    if ($players < $max_players) { print "Online - " . $players . "/" . $max_players . " players|'Online Players'=" . $players . ";" . floor($max_players*.75) . ";" . floor($max_players*.9) . ";0;" . $max_players . " 'Minecraft Version'='" . $version . "' 'Response Time'="; printf "%5.3fs\n", $elapsed; exit(0); }
 
 }
 
@@ -207,13 +207,13 @@ sub ping_17_server {
     my $max_players  = $decoded_resp->{'players'}{'max'};
 
     # If max_players does not have a valid value, server is down, or invalid response was received
-    if ($max_players < 1) { print "DOWN|ResponseTime="; printf "%5.3fs\n", $elapsed; exit(2); }
+    if ($max_players < 1) { print "DOWN"; exit(2); }
 
     # If server is full, exit with warning level
-    if ($players eq $max_players) { print "FULL - " . $players . "/" . $max_players . " players|Players=" . $players . ";" . floor($max_players*.75) . ";" . floor($max_players*.9) . ";0;" . $max_players . "|Version=" . $version . "|ResponseTime="; printf "%5.3fs\n", $elapsed; exit(1); }
+    if ($players eq $max_players) { print "FULL - " . $players . "/" . $max_players . " players|'Online Players'=" . $players . ";" . floor($max_players*.75) . ";" . floor($max_players*.9) . ";0;" . $max_players . " 'Minecraft Version'='" . $version . "' 'Response Time'="; printf "%5.3fs\n", $elapsed; exit(1); }
 
     # If server is not full, exit with good value
-    if ($players < $max_players) { print "Online - " . $players . "/" . $max_players . " players|Players=" . $players . ";" . floor($max_players*.75) . ";" . floor($max_players*.9) . ";0;" . $max_players . "|Version=" . $version . "|ResponseTime="; printf "%5.3fs\n", $elapsed; exit(0); }
+    if ($players < $max_players) { print "Online - " . $players . "/" . $max_players . " players|'Online Players'=" . $players . ";" . floor($max_players*.75) . ";" . floor($max_players*.9) . ";0;" . $max_players . " 'Minecraft Version'='" . $version . "' 'Response Time'="; printf "%5.3fs\n", $elapsed; exit(0); }
 
 }
 
