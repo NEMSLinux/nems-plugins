@@ -40,6 +40,7 @@ end
      Service = "*Service:*\n" .. arg[9] .. '\n\n'                  --$SERVICEDESC$
      message = emoji .. '\n\n' .. Alias .. Date_Time .. Notification .. Host  .. Service ..State .. Address .. Info
    end
+   message:gsub("_", "\\_")
 
 local data_str = 'parse_mode=Markdown&chat_id=' .. chat_id .. '&text=' .. message..''  
 local res, code, headers, status = https.request(telegram_url, data_str)
