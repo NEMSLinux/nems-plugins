@@ -1,7 +1,8 @@
 #!/bin/bash
-# check_pve - Proxmox Virtual Environment server check
+# check_pve 1.0 - Proxmox Virtual Environment server check
 # For NEMS Linux (Compatible with Nagios / Icinga / etc)
 # By Robbie Ferguson // https://nemslinux.com/
+# March 2024
 
 for ARGUMENT in "$@"
 do
@@ -17,9 +18,17 @@ ticket=`curl -s -k -d "username=${username}@${realm}" --data-urlencode "password
 
 json_data=`curl -s --insecure --cookie "${ticket}" https://${ip}:${port}/api2/json/nodes/${node}/status | jq "."`
 
-# Define warning and critical thresholds
-warning_threshold=80
-critical_threshold=95
+
+# Check optional variables and set defaults if not set or invalid
+if [[ -z "$warn" || $warn -lt 0 || $warn -gt 100 ]]; then
+    warn=80
+fi
+if [[ -z "$crit" || $crit -lt 0 || $crit -gt 100 ]]; then
+    crit=95
+fi
+if [[ -z "$port" || ! "$port" =~ ^[0-9]+$ ]]; then
+    port=8006
+fi
 
 check_load() {
     # Parse JSON data and extract relevant fields
@@ -38,14 +47,14 @@ check_load() {
     fi
 
     # Compare loadavg percentage against thresholds
-    if (( $(bc <<< "$loadavg_percentage >= $critical_threshold") )); then
-        echo "CRITICAL: CPU Load ($loadavg_percentage%) exceeds critical threshold ($critical_threshold%) | load=$loadavg;$warning_threshold;$critical_threshold;;"
+    if (( $(bc <<< "$loadavg_percentage >= $crit") )); then
+        echo "CRITICAL: CPU Load ($loadavg_percentage%) exceeds critical threshold (${crit}%) | load=$loadavg;$warn;$crit;;"
         exit 2
-    elif (( $(bc <<< "$loadavg_percentage >= $warning_threshold") )); then
-        echo "WARNING: CPU Load ($loadavg_percentage%) exceeds warning threshold ($warning_threshold%) | load=$loadavg;$warning_threshold;$critical_threshold;;"
+    elif (( $(bc <<< "$loadavg_percentage >= $warn") )); then
+        echo "WARNING: CPU Load ($loadavg_percentage%) exceeds warning threshold (${warn}%) | load=$loadavg;$warn;$crit;;"
         exit 1
     else
-        echo "OK: CPU Load ($loadavg_percentage%) is within thresholds | load=$loadavg;$warning_threshold;$critical_threshold;;"
+        echo "OK: CPU Load ($loadavg_percentage%) is within thresholds | load=$loadavg;$warn;$crit;;"
         exit 0
     fi
 }
@@ -59,14 +68,14 @@ check_rootfs() {
     rootfs_percentage=$(bc <<< "scale=2; $used_rootfs / $total_rootfs * 100")
 
     # Check if rootfs usage exceeds thresholds
-    if (( $(bc <<< "$rootfs_percentage >= 95") )); then
-        echo "CRITICAL: Root filesystem usage $rootfs_percentage% | rootfs_usage=$rootfs_percentage%;80;95;;"
+    if (( $(bc <<< "$rootfs_percentage >= $crit") )); then
+        echo "CRITICAL: Root filesystem usage $rootfs_percentage% | rootfs_usage=$rootfs_percentage%;$warn;$crit;;"
         exit 2
-    elif (( $(bc <<< "$rootfs_percentage >= 80") )); then
-        echo "WARNING: Root filesystem usage $rootfs_percentage% | rootfs_usage=$rootfs_percentage%;80;95;;"
+    elif (( $(bc <<< "$rootfs_percentage >= $warn") )); then
+        echo "WARNING: Root filesystem usage $rootfs_percentage% | rootfs_usage=$rootfs_percentage%;$warn;$crit;;"
         exit 1
     else
-        echo "OK: Root filesystem usage $rootfs_percentage% | rootfs_usage=$rootfs_percentage%;80;95;;"
+        echo "OK: Root filesystem usage $rootfs_percentage% | rootfs_usage=$rootfs_percentage%;$warn;$crit;;"
         exit 0
     fi
 }
@@ -120,14 +129,14 @@ check_memory_usage() {
     fi
 
     # Check if memory usage exceeds thresholds
-    if (( $(bc <<< "$memory_percentage >= 95") )); then
-        echo "CRITICAL: Memory usage is $memory_percentage% | memory_usage=$memory_percentage%;80;95;;"
+    if (( $(bc <<< "$memory_percentage >= $crit") )); then
+        echo "CRITICAL: Memory usage is $memory_percentage% | memory_usage=$memory_percentage%;$warn;$crit;;"
         exit 2
-    elif (( $(bc <<< "$memory_percentage >= 80") )); then
-        echo "WARNING: Memory usage is $memory_percentage% | memory_usage=$memory_percentage%;80;95;;"
+    elif (( $(bc <<< "$memory_percentage >= $warn") )); then
+        echo "WARNING: Memory usage is $memory_percentage% | memory_usage=$memory_percentage%;$warn;$crit;;"
         exit 1
     else
-        echo "OK: Memory usage is $memory_percentage% | memory_usage=$memory_percentage%;80;95;;"
+        echo "OK: Memory usage is $memory_percentage% | memory_usage=$memory_percentage%;$warn;$crit;;"
         exit 0
     fi
 }
@@ -141,14 +150,14 @@ check_swap_usage() {
     swap_percentage=$(bc <<< "scale=2; $used_swap / $total_swap * 100")
 
     # Check if swap usage exceeds thresholds
-    if (( $(bc <<< "$swap_percentage >= 95") )); then
-        echo "CRITICAL: Swap usage is $swap_percentage% | swap_usage=$swap_percentage%;80;95;; swap_total=${total_swap} swap_used=${used_swap};;"
+    if (( $(bc <<< "$swap_percentage >= $crit") )); then
+        echo "CRITICAL: Swap usage is $swap_percentage% | swap_usage=$swap_percentage%;$warn;$crit;; swap_total=${total_swap} swap_used=${used_swap};;"
         exit 2
-    elif (( $(bc <<< "$swap_percentage >= 80") )); then
-        echo "WARNING: Swap usage is $swap_percentage% | swap_usage=$swap_percentage%;80;95;; swap_total=${total_swap} swap_used=${used_swap};;"
+    elif (( $(bc <<< "$swap_percentage >= $warn") )); then
+        echo "WARNING: Swap usage is $swap_percentage% | swap_usage=$swap_percentage%;$warn;$crit;; swap_total=${total_swap} swap_used=${used_swap};;"
         exit 1
     else
-        echo "OK: Swap usage is $swap_percentage% | swap_usage=$swap_percentage%;80;95;; swap_total=${total_swap} swap_used=${used_swap};;"
+        echo "OK: Swap usage is $swap_percentage% | swap_usage=$swap_percentage%;$warn;$crit;; swap_total=${total_swap} swap_used=${used_swap};;"
         exit 0
     fi
 }
@@ -177,8 +186,8 @@ if [[ -z "$ip" || -z "$port" || -z "$node" || -z "$username" || -z "$password" |
     echo -e "  - ${CYAN}password:${NC} Password for that user ${WHITE}[${RED}Required${WHITE}]${NC}"
     echo -e "  - ${CYAN}realm:${NC} Authentication realm (Eg., pve or pam) ${WHITE}[${RED}Required${WHITE}]${NC}"
     echo -e "  - ${CYAN}check:${NC} Specify the check to perform (load, rootfs, version, memory, swap) ${WHITE}[${RED}Required${WHITE}]${NC}"
-    echo -e "  - ${CYAN}warn:${NC} Warning threshold percentage"
-    echo -e "  - ${CYAN}crit:${NC} Critical threshold percentage"
+    echo -e "  - ${CYAN}warn:${NC} Warning threshold [int] percentage (default: 80)"
+    echo -e "  - ${CYAN}crit:${NC} Critical threshold [int] percentage (default: 95)"
     echo
 
     echo -e "${YELLOW}Example:${NC}"
