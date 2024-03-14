@@ -3,6 +3,11 @@
 # For NEMS Linux (Compatible with Nagios / Icinga / etc)
 # By Robbie Ferguson // https://nemslinux.com/
 # March 2024
+#
+# NConf checkcommand:
+# $USER1$/check_pve ip=$HOSTADDRESS$ port=$ARG1$ node=$ARG2$ username="$ARG3$" password="$ARG4$" realm=$ARG5$ check=$ARG6$ warn=$ARG7$ crit=$ARG8$
+# !8006!!!!!!80!95
+# Port,Node Name,PVEAuditor Username,PVEAuditor Password,Realm (Eg. pve or pam),Check (load rootfs version memory swap),Warning %,Critical %
 
 for ARGUMENT in "$@"
 do
@@ -14,11 +19,6 @@ do
    export "$KEY"="$VALUE"
 done
 
-ticket=`curl -s -k -d "username=${username}@${realm}" --data-urlencode "password=${password}" https://${ip}:${port}/api2/json/access/ticket | jq --raw-output '.data.ticket' | sed 's/^/PVEAuthCookie=/'`
-
-json_data=`curl -s --insecure --cookie "${ticket}" https://${ip}:${port}/api2/json/nodes/${node}/status | jq "."`
-
-
 # Check optional variables and set defaults if not set or invalid
 if [[ -z "$warn" || $warn -lt 0 || $warn -gt 100 ]]; then
     warn=80
@@ -29,6 +29,11 @@ fi
 if [[ -z "$port" || ! "$port" =~ ^[0-9]+$ ]]; then
     port=8006
 fi
+
+
+ticket=`curl -s -k -d "username=${username}@${realm}" --data-urlencode "password=${password}" https://${ip}:${port}/api2/json/access/ticket | jq --raw-output '.data.ticket' | sed 's/^/PVEAuthCookie=/'`
+
+json_data=`curl -s --insecure --cookie "${ticket}" https://${ip}:${port}/api2/json/nodes/${node}/status | jq "."`
 
 check_load() {
     # Parse JSON data and extract relevant fields
@@ -84,15 +89,27 @@ check_proxmox_version() {
     # Fetch remote JSON data
     proxmox_json=$(curl -sS https://endoflife.date/api/proxmox-ve.json)
 
+    # Check if proxmox_json is valid JSON containing [.[].latest]
+    if ! jq -e '.[].latest' <<< "$proxmox_json" >/dev/null; then
+        echo "UNKNOWN: Unable to access Proxmox version data from remote server."
+        exit 3
+    fi
+
     # Extract our Proxmox version
     our_version=$(echo "$json_data" | jq -r '.data.pveversion' | cut -d'/' -f2)
+
+    # Check if our_version is a valid float number
+    if ! [[ "$our_version" =~ ^[0-9]+\.[0-9]+(\.[0-9]+)?$ ]]; then
+        echo "UNKNOWN: Proxmox did not send a valid response."
+        exit 3
+    fi
 
     # Extract the latest version from the remote JSON data
     latest_version=$(echo "$proxmox_json" | jq -r '[.[].latest] | map(split(".") | map(tonumber)) | max | join(".")')
 
     # Check if our version is not the latest
     if [ "$our_version" != "$latest_version" ]; then
-        echo "WARNING: Your Proxmox version ($our_version) is not the latest ($latest_version) | proxmox_version=$our_version;;;;"
+        echo "WARNING: Your Proxmox version ($our_version) is not the latest ($latest_version) | version=$our_version latest=$latest_version;;;;"
         exit 1
     fi
 
@@ -106,11 +123,11 @@ check_proxmox_version() {
     current_date=$(date +%Y-%m-%d)
     days_to_eol=$(( ($(date -d "$eol_date" +%s) - $(date -d "$current_date" +%s)) / 86400 ))
     if [ "$days_to_eol" -le 90 ]; then
-        echo "CRITICAL: Your Proxmox version ($our_version) is within 90 days of EOL ($eol_date) | proxmox_version=$our_version;;;;"
+        echo "CRITICAL: Your Proxmox version ($our_version) is within 90 days of EOL ($eol_date) | version=$our_version latest=$latest_version;;;;"
         exit 2
     fi
 
-    echo "OK: Your Proxmox version ($our_version) is up to date | proxmox_version=$our_version;;;;"
+    echo "OK: Your Proxmox version ($our_version) is up to date | version=$our_version latest=$latest_version;;;;"
     exit 0
 }
 
