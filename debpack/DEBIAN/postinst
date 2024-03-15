@@ -5,3 +5,10 @@ java -cp /usr/lib/nagios/plugins/ibmi/nagios4i.jar com.ibm.nagios.config.Initial
 # The monit config file is included in nems-scripts
 # Restart in case anything changed
 /bin/systemctl restart monit
+
+# check_fortigate
+cpan -i Net::SNMP
+cpan -i List::Compare
+cpan -i Getopt::Long
+cpan -i Pod::Usage
+cpan -i Switch
