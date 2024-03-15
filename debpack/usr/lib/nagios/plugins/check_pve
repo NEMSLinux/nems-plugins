@@ -1,8 +1,10 @@
 #!/bin/bash
-# check_pve 1.0 - Proxmox Virtual Environment server check
+# check_pve 1.1 - Proxmox Virtual Environment server check
 # For NEMS Linux (Compatible with Nagios / Icinga / etc)
 # By Robbie Ferguson // https://nemslinux.com/
-# March 2024
+#
+# 1.0 - March 14, 2024 - Initial release.
+# 1.1 - March 15, 2024 - Add cache for PVE ticket and PVE Version JSON
 #
 # NConf checkcommand:
 # $USER1$/check_pve ip=$HOSTADDRESS$ port=$ARG1$ node=$ARG2$ username="$ARG3$" password="$ARG4$" realm=$ARG5$ check=$ARG6$ warn=$ARG7$ crit=$ARG8$
@@ -30,9 +32,18 @@ if [[ -z "$port" || ! "$port" =~ ^[0-9]+$ ]]; then
     port=8006
 fi
 
+# Create a new ticket cache every 90 minutes (tickets are valid for 2 hours)
+# Use the same ticket for all checks based on username (hashed into the cache filename)
+hash=$(echo -n "$username" | md5sum | cut -d' ' -f1)
+ticket_cache_file="/tmp/pve_${hash}.cache"
+cache_max_age=$(date -d "now - 90 minutes" +%s)
+if [ ! -e "$ticket_cache_file" ] || [ "$ticket_cache_file" -ot "$cache_max_age" ]; then
+  # Create or update the ticket cache
+  curl -s -k -d "username=${username}@${realm}" --data-urlencode "password=${password}" https://${ip}:${port}/api2/json/access/ticket | jq --raw-output '.data.ticket' | sed 's/^/PVEAuthCookie=/' > $ticket_cache_file
+fi
+ticket=$(< "$ticket_cache_file")
 
-ticket=`curl -s -k -d "username=${username}@${realm}" --data-urlencode "password=${password}" https://${ip}:${port}/api2/json/access/ticket | jq --raw-output '.data.ticket' | sed 's/^/PVEAuthCookie=/'`
-
+# Connect to the API using our current ticket
 json_data=`curl -s --insecure --cookie "${ticket}" https://${ip}:${port}/api2/json/nodes/${node}/status | jq "."`
 
 check_load() {
@@ -86,8 +97,15 @@ check_rootfs() {
 }
 
 check_proxmox_version() {
-    # Fetch remote JSON data
-    proxmox_json=$(curl -sS https://endoflife.date/api/proxmox-ve.json)
+
+    proxmox_version_cache_file="/tmp/pve_version.cache"
+    cache_max_age=$(date -d "now - 6 hours" +%s)
+    if [ ! -e "$proxmox_version_cache_file" ] || [ "$proxmox_version_cache_file" -ot "$cache_max_age" ]; then
+      # Create or update the Proxmox Version Cache from remote JSON data
+      curl -sS https://endoflife.date/api/proxmox-ve.json > $proxmox_version_cache_file
+    fi
+    proxmox_json=$(< "$proxmox_version_cache_file" )
+
 
     # Check if proxmox_json is valid JSON containing [.[].latest]
     if ! jq -e '.[].latest' <<< "$proxmox_json" >/dev/null; then
