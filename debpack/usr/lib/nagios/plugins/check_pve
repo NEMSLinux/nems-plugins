@@ -1,15 +1,19 @@
 #!/bin/bash
-# check_pve 1.1 - Proxmox Virtual Environment server check
+# check_pve 1.2 - Proxmox Virtual Environment server check
 # For NEMS Linux (Compatible with Nagios / Icinga / etc)
 # By Robbie Ferguson // https://nemslinux.com/
 #
 # 1.0 - March 14, 2024 - Initial release.
 # 1.1 - March 15, 2024 - Add cache for PVE ticket and PVE Version JSON
+# 1.2 - March 17, 2024 - Invalidate ticket if password is changed in NConf, clean up old cache files after 12
 #
 # NConf checkcommand:
 # $USER1$/check_pve ip=$HOSTADDRESS$ port=$ARG1$ node=$ARG2$ username="$ARG3$" password="$ARG4$" realm=$ARG5$ check=$ARG6$ warn=$ARG7$ crit=$ARG8$
 # !8006!!!!!!80!95
 # Port,Node Name,PVEAuditor Username,PVEAuditor Password,Realm (Eg. pve or pam),Check (load rootfs version memory swap),Warning %,Critical %
+
+# Cleanup old caches
+find /tmp/ -name pve_*.cache -type f -mmin +720 -delete
 
 for ARGUMENT in "$@"
 do
@@ -33,8 +37,8 @@ if [[ -z "$port" || ! "$port" =~ ^[0-9]+$ ]]; then
 fi
 
 # Create a new ticket cache every 90 minutes (tickets are valid for 2 hours)
-# Use the same ticket for all checks based on username (hashed into the cache filename)
-hash=$(echo -n "$username" | md5sum | cut -d' ' -f1)
+# Use the same ticket for all checks based on username+password (hashed into the cache filename)
+hash=$(echo -n "${username}${password}" | md5sum | cut -d' ' -f1)
 ticket_cache_file="/tmp/pve_${hash}.cache"
 cache_max_age=$(date -d "now - 90 minutes" +%s)
 if [ ! -e "$ticket_cache_file" ] || [ "$ticket_cache_file" -ot "$cache_max_age" ]; then
@@ -42,9 +46,17 @@ if [ ! -e "$ticket_cache_file" ] || [ "$ticket_cache_file" -ot "$cache_max_age" 
   curl -s -k -d "username=${username}@${realm}" --data-urlencode "password=${password}" https://${ip}:${port}/api2/json/access/ticket | jq --raw-output '.data.ticket' | sed 's/^/PVEAuthCookie=/' > $ticket_cache_file
 fi
 ticket=$(< "$ticket_cache_file")
+if [[ $ticket == 'PVEAuthCookie=null' ]]; then
+  echo "UNKNOWN: Proxmox rejected Username/Password."
+  exit 3
+fi
 
 # Connect to the API using our current ticket
 json_data=`curl -s --insecure --cookie "${ticket}" https://${ip}:${port}/api2/json/nodes/${node}/status | jq "."`
+if [[ -z $json_data ]]; then
+  echo "UNKNOWN: Proxmox did not send a valid response."
+  exit 3
+fi
 
 check_load() {
     # Parse JSON data and extract relevant fields
