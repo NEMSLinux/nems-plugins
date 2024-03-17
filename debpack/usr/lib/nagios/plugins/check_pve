@@ -5,15 +5,15 @@
 #
 # 1.0 - March 14, 2024 - Initial release.
 # 1.1 - March 15, 2024 - Add cache for PVE ticket and PVE Version JSON
-# 1.2 - March 17, 2024 - Invalidate ticket if password is changed in NConf, clean up old cache files after 12
+# 1.2 - March 17, 2024 - Invalidate ticket if password is changed in NConf, clean up old cache files after 12, change ticket cache name to distinguish from version cache
 #
 # NConf checkcommand:
 # $USER1$/check_pve ip=$HOSTADDRESS$ port=$ARG1$ node=$ARG2$ username="$ARG3$" password="$ARG4$" realm=$ARG5$ check=$ARG6$ warn=$ARG7$ crit=$ARG8$
 # !8006!!!!!!80!95
 # Port,Node Name,PVEAuditor Username,PVEAuditor Password,Realm (Eg. pve or pam),Check (load rootfs version memory swap),Warning %,Critical %
 
-# Cleanup old caches
-find /tmp/ -name pve_*.cache -type f -mmin +720 -delete
+# Cleanup old ticket caches after 2 hour age
+find /tmp/ -name pve_ticket_*.cache -type f -mmin +120 -delete
 
 for ARGUMENT in "$@"
 do
@@ -39,7 +39,7 @@ fi
 # Create a new ticket cache every 90 minutes (tickets are valid for 2 hours)
 # Use the same ticket for all checks based on username+password (hashed into the cache filename)
 hash=$(echo -n "${username}${password}" | md5sum | cut -d' ' -f1)
-ticket_cache_file="/tmp/pve_${hash}.cache"
+ticket_cache_file="/tmp/pve_ticket_${hash}.cache"
 cache_max_age=$(date -d "now - 90 minutes" +%s)
 if [ ! -e "$ticket_cache_file" ] || [ "$ticket_cache_file" -ot "$cache_max_age" ]; then
   # Create or update the ticket cache
