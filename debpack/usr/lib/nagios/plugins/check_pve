@@ -154,7 +154,7 @@ check_proxmox_version() {
     # Check if we are within 90 days of EOL
     current_date=$(date +%Y-%m-%d)
     days_to_eol=$(( ($(date -d "$eol_date" +%s) - $(date -d "$current_date" +%s)) / 86400 ))
-    if [ "$days_to_eol" -le 90 ]; then
+    if [ "$eol_date" != FALSE ] && [ "$days_to_eol" -le 90 ]; then
         echo "CRITICAL: Your Proxmox version ($our_version) is within 90 days of EOL ($eol_date) | version=$our_version latest=$latest_version;;;;"
         exit 2
     fi
