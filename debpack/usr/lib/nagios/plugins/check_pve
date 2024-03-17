@@ -128,7 +128,7 @@ check_proxmox_version() {
 
     # Extract our Proxmox version
     our_version=$(echo "$json_data" | jq -r '.data.pveversion' | cut -d'/' -f2)
-    our_version_decimal=$(echo "$version" | sed 's/\.[0-9]*$//')
+    our_version_decimal=$(echo "$our_version" | sed 's/\.[0-9]*$//')
 
     # Check if our_version is a valid float number
     if ! [[ "$our_version" =~ ^[0-9]+\.[0-9]+(\.[0-9]+)?$ ]]; then
