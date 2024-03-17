@@ -5,7 +5,8 @@
 #
 # 1.0 - March 14, 2024 - Initial release.
 # 1.1 - March 15, 2024 - Add cache for PVE ticket and PVE Version JSON
-# 1.2 - March 17, 2024 - Invalidate ticket if password is changed in NConf, clean up old cache files after 12, change ticket cache name to distinguish from version cache
+# 1.2 - March 17, 2024 - Invalidate ticket if password is changed in NConf, clean up old cache files after 12,
+#                        change ticket cache name to distinguish from version cache, use decimal as comparison for version (8.1 instead of 8.1.4)
 #
 # NConf checkcommand:
 # $USER1$/check_pve ip=$HOSTADDRESS$ port=$ARG1$ node=$ARG2$ username="$ARG3$" password="$ARG4$" realm=$ARG5$ check=$ARG6$ warn=$ARG7$ crit=$ARG8$
@@ -127,6 +128,7 @@ check_proxmox_version() {
 
     # Extract our Proxmox version
     our_version=$(echo "$json_data" | jq -r '.data.pveversion' | cut -d'/' -f2)
+    our_version_decimal=$(echo "$version" | sed 's/\.[0-9]*$//')
 
     # Check if our_version is a valid float number
     if ! [[ "$our_version" =~ ^[0-9]+\.[0-9]+(\.[0-9]+)?$ ]]; then
@@ -138,7 +140,7 @@ check_proxmox_version() {
     latest_version=$(echo "$proxmox_json" | jq -r '[.[].latest] | map(split(".") | map(tonumber)) | max | join(".")')
 
     # Check if our version is not the latest
-    if [ "$our_version" != "$latest_version" ]; then
+    if [ "$our_version_decimal" != "$latest_version" ]; then
         echo "WARNING: Your Proxmox version ($our_version) is not the latest ($latest_version) | version=$our_version latest=$latest_version;;;;"
         exit 1
     fi
