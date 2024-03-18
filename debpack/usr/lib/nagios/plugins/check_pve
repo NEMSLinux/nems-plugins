@@ -100,13 +100,13 @@ check_load() {
 
     # Compare loadavg percentage against thresholds
     if (( $(bc <<< "$loadavg_percentage >= $crit") )); then
-        echo "CPU Load: $loadavg_percentage% | load=$loadavg_percentage;$warn;$crit;;"
+        echo "CPU Load: $loadavg_percentage% | Load=${loadavg_percentage}%;$warn;$crit;;; Threads=$cpus LoadAvg1m=$loadavg LoadAvg5m=$loadavg5 LoadAvg15m=$loadavg15;;;;"
         exit 2 # Critical State
     elif (( $(bc <<< "$loadavg_percentage >= $warn") )); then
-        echo "CPU Load: $loadavg_percentage% | load=$loadavg_percentage;$warn;$crit;;"
+        echo "CPU Load: $loadavg_percentage% | Load=${loadavg_percentage}%;$warn;$crit;;; Threads=$cpus LoadAvg1m=$loadavg LoadAvg5m=$loadavg5 LoadAvg15m=$loadavg15;;;;"
         exit 1 # Warning State
     else
-        echo "CPU Load: $loadavg_percentage% | load=$loadavg_percentage;$warn;$crit;;"
+        echo "CPU Load: $loadavg_percentage% | Load=${loadavg_percentage}%;$warn;$crit;;; Threads=$cpus LoadAvg1m=$loadavg LoadAvg5m=$loadavg5 LoadAvg15m=$loadavg15;;;;"
         exit 0 # OK State
     fi
 }
