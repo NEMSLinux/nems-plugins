@@ -7,7 +7,7 @@
 # 1.1 - March 15, 2024 - Add cache for PVE ticket and PVE Version JSON
 # 1.2 - March 17, 2024 - Invalidate ticket if password is changed in NConf, clean up old cache files after 12,
 #                        change ticket cache name to distinguish from version cache, use decimal as comparison for version (8.1 instead of 8.1.4)
-# 1.3 - March 18, 2024 - Retry ticket generation 5 times before giving up.
+# 1.3 - March 18, 2024 - Retry ticket generation 5 times before giving up, Rephrase output, loadavg is converted to percentage
 #
 # NConf checkcommand:
 # $USER1$/check_pve ip=$HOSTADDRESS$ port=$ARG1$ node=$ARG2$ username="$ARG3$" password="$ARG4$" realm=$ARG5$ check=$ARG6$ warn=$ARG7$ crit=$ARG8$
@@ -60,8 +60,8 @@ if [ ! -e "$ticket_cache_file" ] || [ "$ticket_cache_file" -ot "$cache_max_age" 
 
     # If this is the last attempt, give up, otherwise, pause before retrying
     if [ $attempt -gt $retries ]; then
-      echo "UNKNOWN: Proxmox rejected Username/Password."
-      exit 3
+      echo "Proxmox rejected Username/Password."
+      exit 3 # Unknown state
     else
       sleep 5
     fi
@@ -71,15 +71,15 @@ if [ ! -e "$ticket_cache_file" ] || [ "$ticket_cache_file" -ot "$cache_max_age" 
 fi
 ticket=$(< "$ticket_cache_file")
 if [[ $ticket == 'PVEAuthCookie=null' ]]; then
-  echo "UNKNOWN: Proxmox rejected Username/Password."
-  exit 3
+  echo "Proxmox rejected Username/Password."
+  exit 3 # Unknown State
 fi
 
 # Connect to the API using our current ticket
 json_data=`curl -s --insecure --cookie "${ticket}" https://${ip}:${port}/api2/json/nodes/${node}/status | jq "."`
 if [[ -z $json_data ]]; then
-  echo "UNKNOWN: Proxmox did not send a valid response."
-  exit 3
+  echo "Proxmox did not send a valid response."
+  exit 3 # Unknown State
 fi
 
 check_load() {
@@ -100,14 +100,14 @@ check_load() {
 
     # Compare loadavg percentage against thresholds
     if (( $(bc <<< "$loadavg_percentage >= $crit") )); then
-        echo "CRITICAL: CPU Load ($loadavg_percentage%) exceeds critical threshold (${crit}%) | load=$loadavg;$warn;$crit;;"
-        exit 2
+        echo "CPU Load: $loadavg_percentage% | load=$loadavg_percentage;$warn;$crit;;"
+        exit 2 # Critical State
     elif (( $(bc <<< "$loadavg_percentage >= $warn") )); then
-        echo "WARNING: CPU Load ($loadavg_percentage%) exceeds warning threshold (${warn}%) | load=$loadavg;$warn;$crit;;"
-        exit 1
+        echo "CPU Load: $loadavg_percentage% | load=$loadavg_percentage;$warn;$crit;;"
+        exit 1 # Warning State
     else
-        echo "OK: CPU Load ($loadavg_percentage%) is within thresholds | load=$loadavg;$warn;$crit;;"
-        exit 0
+        echo "CPU Load: $loadavg_percentage% | load=$loadavg_percentage;$warn;$crit;;"
+        exit 0 # OK State
     fi
 }
 
@@ -121,14 +121,14 @@ check_rootfs() {
 
     # Check if rootfs usage exceeds thresholds
     if (( $(bc <<< "$rootfs_percentage >= $crit") )); then
-        echo "CRITICAL: Root filesystem usage $rootfs_percentage% | rootfs_usage=$rootfs_percentage%;$warn;$crit;;"
-        exit 2
+        echo "Root filesystem usage: $rootfs_percentage% | rootfs_usage=$rootfs_percentage%;$warn;$crit;;"
+        exit 2 # Critical State
     elif (( $(bc <<< "$rootfs_percentage >= $warn") )); then
-        echo "WARNING: Root filesystem usage $rootfs_percentage% | rootfs_usage=$rootfs_percentage%;$warn;$crit;;"
-        exit 1
+        echo "Root filesystem usage $rootfs_percentage% | rootfs_usage=$rootfs_percentage%;$warn;$crit;;"
+        exit 1 # Warning State
     else
-        echo "OK: Root filesystem usage $rootfs_percentage% | rootfs_usage=$rootfs_percentage%;$warn;$crit;;"
-        exit 0
+        echo "Root filesystem usage $rootfs_percentage% | rootfs_usage=$rootfs_percentage%;$warn;$crit;;"
+        exit 0 # OK State
     fi
 }
 
@@ -145,8 +145,8 @@ check_proxmox_version() {
 
     # Check if proxmox_json is valid JSON containing [.[].latest]
     if ! jq -e '.[].latest' <<< "$proxmox_json" >/dev/null; then
-        echo "UNKNOWN: Unable to access Proxmox version data from remote server."
-        exit 3
+        echo "Unable to access Proxmox version data from remote server."
+        exit 3 # Unknown State
     fi
 
     # Extract our Proxmox version
@@ -155,8 +155,8 @@ check_proxmox_version() {
 
     # Check if our_version is a valid float number
     if ! [[ "$our_version" =~ ^[0-9]+\.[0-9]+(\.[0-9]+)?$ ]]; then
-        echo "UNKNOWN: Proxmox did not send a valid response."
-        exit 3
+        echo "Proxmox did not send a valid response."
+        exit 3 # Unknown State
     fi
 
     # Extract the latest version from the remote JSON data
@@ -164,8 +164,8 @@ check_proxmox_version() {
 
     # Check if our version is not the latest
     if [ "$our_version_decimal" != "$latest_version" ]; then
-        echo "WARNING: Your Proxmox version ($our_version) is not the latest ($latest_version) | version=$our_version latest=$latest_version;;;;"
-        exit 1
+        echo "Your Proxmox version ($our_version) is not the latest ($latest_version) | version=$our_version latest=$latest_version;;;;"
+        exit 1 # Warning State
     fi
 
     # Find the corresponding entry for our version in the remote JSON
@@ -178,12 +178,12 @@ check_proxmox_version() {
     current_date=$(date +%Y-%m-%d)
     days_to_eol=$(( ($(date -d "$eol_date" +%s) - $(date -d "$current_date" +%s)) / 86400 ))
     if [ "$eol_date" != false ] && [ "$days_to_eol" -le 90 ]; then
-        echo "CRITICAL: Your Proxmox version ($our_version) is within 90 days of EOL ($eol_date) | version=$our_version latest=$latest_version;;;;"
-        exit 2
+        echo "Your Proxmox version ($our_version) has reached End-of-Life ($eol_date) | version=$our_version latest=$latest_version;;;;"
+        exit 2 # Critical State
     fi
 
-    echo "OK: Your Proxmox version ($our_version) is up to date | version=$our_version latest=$latest_version;;;;"
-    exit 0
+    echo "Your Proxmox version ($our_version) is up to date | version=$our_version latest=$latest_version;;;;"
+    exit 0 # OK State
 }
 
 check_memory_usage() {
@@ -202,14 +202,14 @@ check_memory_usage() {
 
     # Check if memory usage exceeds thresholds
     if (( $(bc <<< "$memory_percentage >= $crit") )); then
-        echo "CRITICAL: Memory usage is $memory_percentage% | memory_usage=$memory_percentage%;$warn;$crit;;"
-        exit 2
+        echo "Memory usage: $memory_percentage% | memory_usage=$memory_percentage%;$warn;$crit;;"
+        exit 2 # Critical State
     elif (( $(bc <<< "$memory_percentage >= $warn") )); then
-        echo "WARNING: Memory usage is $memory_percentage% | memory_usage=$memory_percentage%;$warn;$crit;;"
-        exit 1
+        echo "Memory usage: $memory_percentage% | memory_usage=$memory_percentage%;$warn;$crit;;"
+        exit 1 # Warning State
     else
-        echo "OK: Memory usage is $memory_percentage% | memory_usage=$memory_percentage%;$warn;$crit;;"
-        exit 0
+        echo "Memory usage: $memory_percentage% | memory_usage=$memory_percentage%;$warn;$crit;;"
+        exit 0 # OK State
     fi
 }
 
@@ -223,14 +223,14 @@ check_swap_usage() {
 
     # Check if swap usage exceeds thresholds
     if (( $(bc <<< "$swap_percentage >= $crit") )); then
-        echo "CRITICAL: Swap usage is $swap_percentage% | swap_usage=$swap_percentage%;$warn;$crit;; swap_total=${total_swap} swap_used=${used_swap};;"
-        exit 2
+        echo "Swap usage: $swap_percentage% | swap_usage=$swap_percentage%;$warn;$crit;; swap_total=${total_swap} swap_used=${used_swap};;"
+        exit 2 # Critical State
     elif (( $(bc <<< "$swap_percentage >= $warn") )); then
-        echo "WARNING: Swap usage is $swap_percentage% | swap_usage=$swap_percentage%;$warn;$crit;; swap_total=${total_swap} swap_used=${used_swap};;"
-        exit 1
+        echo "Swap usage: $swap_percentage% | swap_usage=$swap_percentage%;$warn;$crit;; swap_total=${total_swap} swap_used=${used_swap};;"
+        exit 1 # Warning State
     else
-        echo "OK: Swap usage is $swap_percentage% | swap_usage=$swap_percentage%;$warn;$crit;; swap_total=${total_swap} swap_used=${used_swap};;"
-        exit 0
+        echo "Swap usage: $swap_percentage% | swap_usage=$swap_percentage%;$warn;$crit;; swap_total=${total_swap} swap_used=${used_swap};;"
+        exit 0 # OK State
     fi
 }
 
@@ -243,7 +243,7 @@ if [[ -z "$ip" || -z "$port" || -z "$node" || -z "$username" || -z "$password" |
     NC='\033[0m' # No Color
 
     echo -e "${WHITE}"
-    echo "check_pve 1.0 by Robbie Ferguson // https://nemslinux.com/"
+    echo "check_pve 1.3 by Robbie Ferguson // https://nemslinux.com/"
     echo -e "${NC}"
 
     echo -e "${YELLOW}Usage:${NC}"
