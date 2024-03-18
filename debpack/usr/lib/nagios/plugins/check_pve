@@ -1,5 +1,5 @@
 #!/bin/bash
-# check_pve 1.2 - Proxmox Virtual Environment server check
+# check_pve 1.3 - Proxmox Virtual Environment server check
 # For NEMS Linux (Compatible with Nagios / Icinga / etc)
 # By Robbie Ferguson // https://nemslinux.com/
 #
@@ -7,6 +7,7 @@
 # 1.1 - March 15, 2024 - Add cache for PVE ticket and PVE Version JSON
 # 1.2 - March 17, 2024 - Invalidate ticket if password is changed in NConf, clean up old cache files after 12,
 #                        change ticket cache name to distinguish from version cache, use decimal as comparison for version (8.1 instead of 8.1.4)
+# 1.3 - March 18, 2024 - Retry ticket generation 5 times before giving up.
 #
 # NConf checkcommand:
 # $USER1$/check_pve ip=$HOSTADDRESS$ port=$ARG1$ node=$ARG2$ username="$ARG3$" password="$ARG4$" realm=$ARG5$ check=$ARG6$ warn=$ARG7$ crit=$ARG8$
@@ -43,8 +44,30 @@ hash=$(echo -n "${username}${password}" | md5sum | cut -d' ' -f1)
 ticket_cache_file="/tmp/pve_ticket_${hash}.cache"
 cache_max_age=$(date -d "now - 90 minutes" +%s)
 if [ ! -e "$ticket_cache_file" ] || [ "$ticket_cache_file" -ot "$cache_max_age" ]; then
-  # Create or update the ticket cache
-  curl -s -k -d "username=${username}@${realm}" --data-urlencode "password=${password}" https://${ip}:${port}/api2/json/access/ticket | jq --raw-output '.data.ticket' | sed 's/^/PVEAuthCookie=/' > $ticket_cache_file
+  retries=5
+  attempt=1
+  while [ $attempt -le $retries ]; do
+    # Get a ticket from the Proxmox VE host
+    auth=`curl -s -k -d "username=${username}@${realm}" --data-urlencode "password=${password}" https://${ip}:${port}/api2/json/access/ticket`
+    # Check if the JSON response contains {"data":null}
+    if [[ $(echo "$auth" | jq '.data == null') == true ]]; then
+      # A null response was received, so try again
+      ((attempt++))
+    else
+      # A valid response was received, so proceed
+      break
+    fi
+
+    # If this is the last attempt, give up, otherwise, pause before retrying
+    if [ $attempt -gt $retries ]; then
+      echo "UNKNOWN: Proxmox rejected Username/Password."
+      exit 3
+    else
+      sleep 5
+    fi
+  done
+  ticket=`echo $auth | jq --raw-output '.data.ticket'`
+  echo $ticket | sed 's/^/PVEAuthCookie=/' > $ticket_cache_file
 fi
 ticket=$(< "$ticket_cache_file")
 if [[ $ticket == 'PVEAuthCookie=null' ]]; then
@@ -154,7 +177,7 @@ check_proxmox_version() {
     # Check if we are within 90 days of EOL
     current_date=$(date +%Y-%m-%d)
     days_to_eol=$(( ($(date -d "$eol_date" +%s) - $(date -d "$current_date" +%s)) / 86400 ))
-    if [ "$eol_date" != FALSE ] && [ "$days_to_eol" -le 90 ]; then
+    if [ "$eol_date" != false ] && [ "$days_to_eol" -le 90 ]; then
         echo "CRITICAL: Your Proxmox version ($our_version) is within 90 days of EOL ($eol_date) | version=$our_version latest=$latest_version;;;;"
         exit 2
     fi
