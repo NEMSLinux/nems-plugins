@@ -4,7 +4,7 @@ Priority: required
 Section: plugins
 Maintainer: NEMS Linux <nems@category5.tv>
 Architecture: all
-Version: 1.6.082
+Version: 1.6.084
 Provides: nems-plugins
 Description: NEMS Plugins for check commands within NEMS Linux
 Depends: fuse, owfs, libow-perl, libnagios-plugin-perl | libmonitoring-plugin-perl, openjdk-11-jre-headless | openjdk-17-jre-headless, curl, jq, bc, wmic, 9590, iperf, iperf3, libswitch-perl, libio-socket-ssl-perl, monit

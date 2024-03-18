@@ -89,24 +89,54 @@ check_load() {
     loadavg5=$(echo "$json_data" | jq -r '.data.loadavg[1]')
     loadavg15=$(echo "$json_data" | jq -r '.data.loadavg[2]')
 
+    # Initialize variables to store highest and lowest values
+    loadhigh=$loadavg
+    loadlow=$loadavg
+
+    # Comparing loadavg5 with highest and lowest
+    if (( $(echo "$loadavg5 > $loadhigh" | bc -l) )); then
+      loadhigh=$loadavg5
+    fi
+    if (( $(echo "$loadavg5 < $loadlow" | bc -l) )); then
+      loadlow=$loadavg5
+    fi
+
+    # Comparing loadavg15 with highest and lowest
+    if (( $(echo "$loadavg15 > $loadhigh" | bc -l) )); then
+      loadhigh=$loadavg15
+    fi
+    if (( $(echo "$loadavg15 < $loadlow" | bc -l) )); then
+      loadlow=$loadavg15
+    fi
+
     # Calculate the percentage of loadavg against cpus
     loadavg_percentage=$(bc <<< "scale=2; $loadavg / $cpus * 100")
+    loadavg_low_percentage=$(bc <<< "scale=2; $loadlow / $cpus * 100")
+    loadavg_high_percentage=$(bc <<< "scale=2; $loadhigh / $cpus * 100")
 
     # 1 decimal place or a whole number if the decimal is zero
     loadavg_percentage=$(printf "%.1f" "$loadavg_percentage")
     if [[ "$loadavg_percentage" == *\.0 ]]; then
         loadavg_percentage=${loadavg_percentage%\.0}
     fi
+    loadavg_low_percentage=$(printf "%.1f" "$loadavg_low_percentage")
+    if [[ "$loadavg_low_percentage" == *\.0 ]]; then
+        loadavg_low_percentage=${loadavg_low_percentage%\.0}
+    fi
+    loadavg_high_percentage=$(printf "%.1f" "$loadavg_high_percentage")
+    if [[ "$loadavg_high_percentage" == *\.0 ]]; then
+        loadavg_high_percentage=${loadavg_high_percentage%\.0}
+    fi
 
     # Compare loadavg percentage against thresholds
     if (( $(bc <<< "$loadavg_percentage >= $crit") )); then
-        echo "CPU Load: $loadavg_percentage% | Load=${loadavg_percentage}%;$warn;$crit;;; Threads=$cpus LoadAvg1m=$loadavg LoadAvg5m=$loadavg5 LoadAvg15m=$loadavg15;;;;"
+        echo "CPU Load: $loadavg_percentage% | Load=${loadavg_percentage}%;$warn;$crit;$loadavg_low_percentage;$loadavg_high_percentage; Threads=$cpus LoadAvg1m=$loadavg LoadAvg5m=$loadavg5 LoadAvg15m=$loadavg15;;;;"
         exit 2 # Critical State
     elif (( $(bc <<< "$loadavg_percentage >= $warn") )); then
-        echo "CPU Load: $loadavg_percentage% | Load=${loadavg_percentage}%;$warn;$crit;;; Threads=$cpus LoadAvg1m=$loadavg LoadAvg5m=$loadavg5 LoadAvg15m=$loadavg15;;;;"
+        echo "CPU Load: $loadavg_percentage% | Load=${loadavg_percentage}%;$warn;$crit;$loadavg_low_percentage;$loadavg_high_percentage; Threads=$cpus LoadAvg1m=$loadavg LoadAvg5m=$loadavg5 LoadAvg15m=$loadavg15;;;;"
         exit 1 # Warning State
     else
-        echo "CPU Load: $loadavg_percentage% | Load=${loadavg_percentage}%;$warn;$crit;;; Threads=$cpus LoadAvg1m=$loadavg LoadAvg5m=$loadavg5 LoadAvg15m=$loadavg15;;;;"
+        echo "CPU Load: $loadavg_percentage% | Load=${loadavg_percentage}%;$warn;$crit;$loadavg_low_percentage;$loadavg_high_percentage; Threads=$cpus LoadAvg1m=$loadavg LoadAvg5m=$loadavg5 LoadAvg15m=$loadavg15;;;;"
         exit 0 # OK State
     fi
 }
@@ -121,13 +151,13 @@ check_rootfs() {
 
     # Check if rootfs usage exceeds thresholds
     if (( $(bc <<< "$rootfs_percentage >= $crit") )); then
-        echo "Root filesystem usage: $rootfs_percentage% | rootfs_usage=$rootfs_percentage%;$warn;$crit;;"
+        echo "Root filesystem usage: $rootfs_percentage% | Usage=${rootfs_percentage}%;$warn;$crit;;"
         exit 2 # Critical State
     elif (( $(bc <<< "$rootfs_percentage >= $warn") )); then
-        echo "Root filesystem usage $rootfs_percentage% | rootfs_usage=$rootfs_percentage%;$warn;$crit;;"
+        echo "Root filesystem usage $rootfs_percentage% | Usage=${rootfs_percentage}%;$warn;$crit;;"
         exit 1 # Warning State
     else
-        echo "Root filesystem usage $rootfs_percentage% | rootfs_usage=$rootfs_percentage%;$warn;$crit;;"
+        echo "Root filesystem usage $rootfs_percentage% | Usage=${rootfs_percentage}%;$warn;$crit;;"
         exit 0 # OK State
     fi
 }
@@ -164,7 +194,7 @@ check_proxmox_version() {
 
     # Check if our version is not the latest
     if [ "$our_version_decimal" != "$latest_version" ]; then
-        echo "Your Proxmox version ($our_version) is not the latest ($latest_version) | version=$our_version latest=$latest_version;;;;"
+        echo "Your Proxmox version ($our_version) is not the latest ($latest_version) | Version=$our_version Latest=$latest_version;;;;"
         exit 1 # Warning State
     fi
 
@@ -178,11 +208,11 @@ check_proxmox_version() {
     current_date=$(date +%Y-%m-%d)
     days_to_eol=$(( ($(date -d "$eol_date" +%s) - $(date -d "$current_date" +%s)) / 86400 ))
     if [ "$eol_date" != false ] && [ "$days_to_eol" -le 90 ]; then
-        echo "Your Proxmox version ($our_version) has reached End-of-Life ($eol_date) | version=$our_version latest=$latest_version;;;;"
+        echo "Your Proxmox version ($our_version) has reached End-of-Life ($eol_date) | Version=$our_version Latest=$latest_version;;;;"
         exit 2 # Critical State
     fi
 
-    echo "Your Proxmox version ($our_version) is up to date | version=$our_version latest=$latest_version;;;;"
+    echo "Your Proxmox version ($our_version) is up to date | Version=$our_version Latest=$latest_version;;;;"
     exit 0 # OK State
 }
 
@@ -202,13 +232,13 @@ check_memory_usage() {
 
     # Check if memory usage exceeds thresholds
     if (( $(bc <<< "$memory_percentage >= $crit") )); then
-        echo "Memory usage: $memory_percentage% | memory_usage=$memory_percentage%;$warn;$crit;;"
+        echo "Memory usage: $memory_percentage% | Usage=$memory_percentage%;$warn;$crit;;"
         exit 2 # Critical State
     elif (( $(bc <<< "$memory_percentage >= $warn") )); then
-        echo "Memory usage: $memory_percentage% | memory_usage=$memory_percentage%;$warn;$crit;;"
+        echo "Memory usage: $memory_percentage% | Usage=$memory_percentage%;$warn;$crit;;"
         exit 1 # Warning State
     else
-        echo "Memory usage: $memory_percentage% | memory_usage=$memory_percentage%;$warn;$crit;;"
+        echo "Memory usage: $memory_percentage% | Usage=$memory_percentage%;$warn;$crit;;"
         exit 0 # OK State
     fi
 }
@@ -223,13 +253,13 @@ check_swap_usage() {
 
     # Check if swap usage exceeds thresholds
     if (( $(bc <<< "$swap_percentage >= $crit") )); then
-        echo "Swap usage: $swap_percentage% | swap_usage=$swap_percentage%;$warn;$crit;; swap_total=${total_swap} swap_used=${used_swap};;"
+        echo "Swap usage: $swap_percentage% | Usage=${swap_percentage}%;$warn;$crit;; Total=${total_swap} Used=${used_swap};;"
         exit 2 # Critical State
     elif (( $(bc <<< "$swap_percentage >= $warn") )); then
-        echo "Swap usage: $swap_percentage% | swap_usage=$swap_percentage%;$warn;$crit;; swap_total=${total_swap} swap_used=${used_swap};;"
+        echo "Swap usage: $swap_percentage% | Usage=${swap_percentage}%;$warn;$crit;; Total=${total_swap} Used=${used_swap};;"
         exit 1 # Warning State
     else
-        echo "Swap usage: $swap_percentage% | swap_usage=$swap_percentage%;$warn;$crit;; swap_total=${total_swap} swap_used=${used_swap};;"
+        echo "Swap usage: $swap_percentage% | Usage=${swap_percentage}%;$warn;$crit;; Total=${total_swap} Used=${used_swap};;"
         exit 0 # OK State
     fi
 }
