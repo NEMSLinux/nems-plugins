@@ -3,9 +3,10 @@
 
 /*
 
-  check_temper - Version 1.7
+  check_temper - Version 1.8
   Written by Robbie Ferguson for NEMS Linux
   -----
+  1.8 - March 29, 2024 - Add perfdata to output, remove redundant state from output (exit code provides this)
   1.7 - June 2, 2020 - Correct the output from Humidity Sensor if no TEMPer is detected
   1.6 - June 2, 2020 - Enforce array processing of JSON data
   1.5 - June 1, 2020 - Connect with NEMS SST Calibration for NEMS Linux 1.6
@@ -13,7 +14,7 @@
   1.3 - August 4, 2019 - Automatically determine whether ARG is C or F and act accordingly
   1.2 - August 1, 2019 - Add UNKNOWN state if TEMPer is not connected
   1.1 - July 31, 2019 - Add exit codes
-  1.0 - July 29, 2019 - Initial release 
+  1.0 - July 29, 2019 - Initial release
 
 */
 
@@ -51,9 +52,9 @@
 
     if ($data['type'] == 'hum' && !isset($temper['internal humidity'])) {
       if ($tmp['sensors']['thermal'] == 1) {
-        echo 'UNKNOWN - Your TEMPer device does not have a humidity sensor.';
+        echo 'Your TEMPer device does not have a humidity sensor.';
       } else {
-        echo 'UNKNOWN - TEMPer device disconnected or not present.';
+        echo 'TEMPer device disconnected or not present.';
       }
       exit(3);
     } else {
@@ -61,45 +62,49 @@
     }
 
     if ($data['type'] == 'temp') {
+      $perfdata = "|Temperature[low]={$data['temperature'][$type]}${type};{$data['warn_low']};{$data['crit_low']};;";
+      $perfdata .= " Temperature[high]={$data['temperature'][$type]}${type};{$data['warn_high']};{$data['crit_high']};;";
       if ($data['temperature'][$type] < $data['crit_low']) {
-        echo 'CRITICAL - ' . $data['temperature']['C'] . '°C / ' . $data['temperature']['F'] . '°F (LOW)';
+        echo $data['temperature']['C'] . '°C / ' . $data['temperature']['F'] . '°F (LOW)' . $perfdata;
         exit(2);
       } elseif ($data['temperature'][$type] < $data['warn_low']) {
-        echo 'WARNING - ' . $data['temperature']['C'] . '°C / ' . $data['temperature']['F'] . '°F (LOW)';
+        echo $data['temperature']['C'] . '°C / ' . $data['temperature']['F'] . '°F (LOW)' . $perfdata;
         exit(1);
       } elseif ($data['temperature'][$type] > $data['crit_high']) {
-        echo 'CRITICAL - ' . $data['temperature']['C'] . '°C / ' . $data['temperature']['F'] . '°F (HIGH)';
+        echo $data['temperature']['C'] . '°C / ' . $data['temperature']['F'] . '°F (HIGH)' . $perfdata;
         exit(2);
       } elseif ($data['temperature'][$type] > $data['warn_high']) {
-        echo 'WARNING - ' . $data['temperature']['C'] . '°C / ' . $data['temperature']['F'] . '°F (HIGH)'; 
+        echo $data['temperature']['C'] . '°C / ' . $data['temperature']['F'] . '°F (HIGH)' . $perfdata;
         exit(1);
       } else {
-        echo 'OK - ' . $data['temperature']['C'] . '°C / ' . $data['temperature']['F'] . '°F'; 
+        echo $data['temperature']['C'] . '°C / ' . $data['temperature']['F'] . '°F' . $perfdata;
         exit(0);
       }
     } elseif ($data['type'] == 'hum') {
+      $perfdata = "|Humidity[low]={$data['humidity']}%;{$data['warn_low']};{$data['crit_low']};;";
+      $perfdata .= " Humidity[high]={$data['humidity']}%;{$data['warn_high']};{$data['crit_high']};;";
       if ($data['humidity'] < $data['crit_low']) {
-        echo 'CRITICAL - Humidity at ' . $data['humidity'] . '% (LOW)';
+        echo $data['humidity'] . '% Relative Humidity (LOW)' . $perfdata;
         exit(2);
       } elseif ($data['humidity'] < $data['warn_low']) {
-        echo 'WARNING - Humidity at ' . $data['humidity'] . '% (LOW)';
+        echo $data['humidity'] . '% Relative Humidity (LOW)' . $perfdata;
         exit(1);
       } elseif ($data['humidity'] > $data['crit_high']) {
-        echo 'CRITICAL - Humidity at ' . $data['humidity'] . '% (HIGH)';
+        echo $data['humidity'] . '% Relative Humidity (HIGH)' . $perfdata;
         exit(2);
       } elseif ($data['humidity'] > $data['warn_high']) {
-        echo 'WARNING - Humidity at ' . $data['humidity'] . '% (HIGH)'; 
+        echo $data['humidity'] . '% Relative Humidity (HIGH)' . $perfdata;
         exit(1);
       } else {
-        echo 'OK - Humidity at ' . $data['humidity'] . '%'; 
+        echo $data['humidity'] . '% Relative Humidity' . $perfdata;
         exit(0);
       }
     } else {
-      echo 'UNKNOWN - Invalid command type. Options are temp (temperature) or hum (humidity).';
+      echo 'Invalid command type. Options are temp (temperature) or hum (humidity).';
       exit(3);
     }
   } else {
-    echo 'UNKNOWN - TEMPer device disconnected or not present.';
+    echo 'TEMPer device disconnected or not present.';
     exit(3);
   }
 ?>
