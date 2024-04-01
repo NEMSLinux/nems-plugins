@@ -6,6 +6,8 @@
   check_nems_php_agent
   Written by Robbie Ferguson for NEMS Linux
   -----
+  1.6 - Apr 1, 2024  - Remove redundant state output. Added perfdata to storage.
+
   1.5 - Aug 16, 2022 - If a disk check is performed and the target disk is not
                        mounted, give CRIT rather than parent disk usage.
                        Suppress CLI errors.
@@ -33,7 +35,7 @@
 
 */
 
-  $nemsagentver = '1.5';
+  $nemsagentver = '1.6';
 
   if (count($argv) >=5) {
     array_shift($argv);
@@ -59,7 +61,7 @@
         }
   }
   if ($php_agent_key == '') {
-    echo 'UNKNOWN - Missing passphrase. Did you set one in NEMS SST?';
+    echo 'Missing passphrase. Did you set one in NEMS SST?';
     exit(3);
   }
 
@@ -83,7 +85,7 @@
 
   // Stop if header is anything other than 'found'
     if ($httpcode != 200) {
-      echo 'UNKNOWN - NEMS PHP Server Agent not found at provided URL (' . $httpcode . ').';
+      echo 'NEMS PHP Server Agent not found at provided URL (' . $httpcode . ').';
       exit(3);
     }
 
@@ -95,7 +97,7 @@
 
   $data['response'] = json_decode($response);
   if (!is_object($data['response'])) {
-    echo 'UNKNOWN - Invalid response from nems-agent.php at that URL.';
+    echo 'Invalid response from nems-agent.php at that URL.';
     exit(3);
   }
 
@@ -104,7 +106,7 @@
   $authLocal = hash('sha256', $decryptionkey);
 
   if ($authLocal != $data['response']->auth) {
-    echo 'UNKNOWN - Local PHP Agent encryption passphrase differs from remote.';
+    echo 'Local PHP Agent encryption passphrase differs from remote.';
     exit(3);
   }
 
@@ -113,7 +115,7 @@
 
   // Make sure it decrypted okay
     if (!is_object($data['response']->data)) {
-      echo 'UNKNOWN - Invalid decrypted response from nems-agent.php at that URL.';
+      echo 'Invalid decrypted response from nems-agent.php at that URL.';
       exit(3);
     }
 
@@ -122,26 +124,26 @@
 
       case 'load':
         if ($data['response']->data->cpu->loadaverage->{15} > $data['crit']) {
-          echo 'CRITICAL - 15 Minute Load Average: ' . $data['response']->data->cpu->loadaverage->{15};
+          echo '15 Minute Load Average: ' . $data['response']->data->cpu->loadaverage->{15};
           exit(2);
         } else if ($data['response']->data->cpu->loadaverage->{15} > $data['warn']) {
-          echo 'WARN - 15 Minute Load Average: ' . $data['response']->data->cpu->loadaverage->{15};
+          echo '15 Minute Load Average: ' . $data['response']->data->cpu->loadaverage->{15};
           exit(1);
         } else {
-          echo 'OK - 15 Minute Load Average: ' . $data['response']->data->cpu->loadaverage->{15};
+          echo '15 Minute Load Average: ' . $data['response']->data->cpu->loadaverage->{15};
           exit(0);
         }
         break;
 
       case 'mem':
         if ($data['response']->data->mem->percent > $data['crit']) {
-          echo 'CRITICAL - Memory Usage: ' . $data['response']->data->mem->percent . '%';
+          echo 'Memory Usage: ' . $data['response']->data->mem->percent . '%';
           exit(2);
         } else if ($data['response']->data->mem->percent > $data['warn']) {
-          echo 'WARN - Memory Usage: ' . $data['response']->data->mem->percent . '%';
+          echo 'Memory Usage: ' . $data['response']->data->mem->percent . '%';
           exit(1);
         } else {
-          echo 'OK - Memory Usage: ' . $data['response']->data->mem->percent . '%';
+          echo 'Memory Usage: ' . $data['response']->data->mem->percent . '%';
           exit(0);
         }
         break;
@@ -150,22 +152,26 @@
         $mountpoint = '/';
         if (isset($data['switch']) && strlen($data['switch']) > 0) $mountpoint = $data['switch'];
         if (isset($data['response']->data->storage->$mountpoint->mounted) && $data['response']->data->storage->$mountpoint->mounted == 0) {
-            echo 'CRITICAL - NOT MOUNTED (' . $mountpoint . ')';
+            echo 'NOT MOUNTED (' . $mountpoint . ')';
             exit(2);
         } else {
           if (!isset($data['response']->data->storage->$mountpoint->locked)) {
+            $perfdata = ' | Used=' . $data['response']->data->storage->$mountpoint->used . 'GB;' . round(($data['response']->data->storage->$mountpoint->used * ($data['warn']/100)),2) . ';' . round(($data['response']->data->storage->$mountpoint->used * ($data['crit']/100)),2) . '; ';
+            $perfdata .= 'Capacity=' . $data['response']->data->storage->$mountpoint->total . 'GB; ';
+            $perfdata .= 'Usage=' . $data['response']->data->storage->$mountpoint->percent . '%;' . $data['warn'] . ';' . $data['crit'] . '; ';
+            $perfdata .= 'Free=' . $data['response']->data->storage->$mountpoint->free . 'GB;' . round( $data['response']->data->storage->$mountpoint->total - ($data['response']->data->storage->$mountpoint->total * ($data['warn']/100) ),2) . ';' . round( $data['response']->data->storage->$mountpoint->total - ($data['response']->data->storage->$mountpoint->total * ($data['crit']/100)),2) . '; ';
             if ($data['response']->data->storage->$mountpoint->percent > $data['crit']) {
-              echo 'CRITICAL - Disk Usage ' . $data['response']->data->storage->$mountpoint->percent . '% (' . $mountpoint . ')';
+              echo 'Disk Usage: ' . $data['response']->data->storage->$mountpoint->percent . '% (' . $mountpoint . ')' . $perfdata;
               exit(2);
             } else if ($data['response']->data->storage->$mountpoint->percent > $data['warn']) {
-              echo 'WARN - Disk Usage ' . $data['response']->data->storage->$mountpoint->percent . '% (' . $mountpoint . ')';
+              echo 'Disk Usage: ' . $data['response']->data->storage->$mountpoint->percent . '% (' . $mountpoint . ')' . $perfdata;
               exit(1);
             } else {
-              echo 'OK - Disk Usage ' . $data['response']->data->storage->$mountpoint->percent . '% (' . $mountpoint . ')';
+              echo 'Disk Usage: ' . $data['response']->data->storage->$mountpoint->percent . '% (' . $mountpoint . ')' . $perfdata;
               exit(0);
             }
           } else {
-            echo "UNKNOWN - open_basedir in effect: Cannot access $mountpoint";
+            echo "open_basedir in effect: Cannot access $mountpoint";
             exit(3);
           }
         }
@@ -173,43 +179,43 @@
 
       case 'net':
         if (isset($data['response']->data->network->none)) {
-          echo "UNKNOWN - You need to install ifstat on remote server";
+          echo "You need to install ifstat on remote server";
           exit(3);
         }
         if ($data['response']->data->network->total->rx > $data['crit'] || $data['response']->data->network->total->tx > $data['crit']) {
-          echo 'CRITICAL - Network: ' . $data['response']->data->network->total->rx . ' Mb/s Down / ' . $data['response']->data->network->total->tx . ' Mb/s Up';
+          echo 'Network: ' . $data['response']->data->network->total->rx . ' Mb/s Down / ' . $data['response']->data->network->total->tx . ' Mb/s Up';
           exit(2);
         } else if ($data['response']->data->network->total->rx > $data['warn'] || $data['response']->data->network->total->tx > $data['warn']) {
-          echo 'WARN - Network: ' . $data['response']->data->network->total->rx . ' Mb/s Down / ' . $data['response']->data->network->total->tx . ' Mb/s Up';
+          echo 'Network: ' . $data['response']->data->network->total->rx . ' Mb/s Down / ' . $data['response']->data->network->total->tx . ' Mb/s Up';
           exit(1);
         } else {
-          echo 'OK - Network: ' . $data['response']->data->network->total->rx . ' Mb/s Down / ' . $data['response']->data->network->total->tx . ' Mb/s Up';
+          echo 'Network: ' . $data['response']->data->network->total->rx . ' Mb/s Down / ' . $data['response']->data->network->total->tx . ' Mb/s Up';
           exit(0);
         }
         break;
 
       case 'netrx':
         if ($data['response']->data->network->total->rx > $data['crit']) {
-          echo 'CRITICAL - Network: ' . $data['response']->data->network->total->rx . ' Mb/s Down';
+          echo 'Network: ' . $data['response']->data->network->total->rx . ' Mb/s Down';
           exit(2);
         } else if ($data['response']->data->network->total->rx > $data['warn']) {
-          echo 'WARN - Network: ' . $data['response']->data->network->total->rx . ' Mb/s Down';
+          echo 'Network: ' . $data['response']->data->network->total->rx . ' Mb/s Down';
           exit(1);
         } else {
-          echo 'OK - Network: ' . $data['response']->data->network->total->rx . ' Mb/s Down';
+          echo 'Network: ' . $data['response']->data->network->total->rx . ' Mb/s Down';
           exit(0);
         }
         break;
 
       case 'nettx':
         if ($data['response']->data->network->total->tx > $data['crit']) {
-          echo 'CRITICAL - Network: ' . $data['response']->data->network->total->tx . ' Mb/s Up';
+          echo 'Network: ' . $data['response']->data->network->total->tx . ' Mb/s Up';
           exit(2);
         } else if ($data['response']->data->network->total->tx > $data['warn']) {
-          echo 'WARN - Network: ' . $data['response']->data->network->total->tx . ' Mb/s Up';
+          echo 'Network: ' . $data['response']->data->network->total->tx . ' Mb/s Up';
           exit(1);
         } else {
-          echo 'OK - Network: ' . $data['response']->data->network->total->tx . ' Mb/s Up';
+          echo 'Network: ' . $data['response']->data->network->total->tx . ' Mb/s Up';
           exit(0);
         }
         break;
@@ -228,5 +234,3 @@ function exit_usage() {
     echo 'Example: ' . $argv[0] . ' 3 9 https://example.com/nems-agent.php load' . PHP_EOL . PHP_EOL;
     exit(3);
 }
-
-print_r($data);
