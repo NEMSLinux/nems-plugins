@@ -6,7 +6,8 @@
   check_nems_php_agent
   Written by Robbie Ferguson for NEMS Linux
   -----
-  1.6 - Apr 1, 2024  - Remove redundant state output. Added perfdata to storage.
+  1.6 - Apr 1, 2024  - Remove redundant state output and test names.
+                       Added perfdata to storage.
 
   1.5 - Aug 16, 2022 - If a disk check is performed and the target disk is not
                        mounted, give CRIT rather than parent disk usage.
@@ -124,26 +125,26 @@
 
       case 'load':
         if ($data['response']->data->cpu->loadaverage->{15} > $data['crit']) {
-          echo '15 Minute Load Average: ' . $data['response']->data->cpu->loadaverage->{15};
+          echo $data['response']->data->cpu->loadaverage->{15};
           exit(2);
         } else if ($data['response']->data->cpu->loadaverage->{15} > $data['warn']) {
-          echo '15 Minute Load Average: ' . $data['response']->data->cpu->loadaverage->{15};
+          echo $data['response']->data->cpu->loadaverage->{15};
           exit(1);
         } else {
-          echo '15 Minute Load Average: ' . $data['response']->data->cpu->loadaverage->{15};
+          echo $data['response']->data->cpu->loadaverage->{15};
           exit(0);
         }
         break;
 
       case 'mem':
         if ($data['response']->data->mem->percent > $data['crit']) {
-          echo 'Memory Usage: ' . $data['response']->data->mem->percent . '%';
+          echo $data['response']->data->mem->percent . '%';
           exit(2);
         } else if ($data['response']->data->mem->percent > $data['warn']) {
-          echo 'Memory Usage: ' . $data['response']->data->mem->percent . '%';
+          echo $data['response']->data->mem->percent . '%';
           exit(1);
         } else {
-          echo 'Memory Usage: ' . $data['response']->data->mem->percent . '%';
+          echo $data['response']->data->mem->percent . '%';
           exit(0);
         }
         break;
@@ -161,13 +162,13 @@
             $perfdata .= 'Usage=' . $data['response']->data->storage->$mountpoint->percent . '%;' . $data['warn'] . ';' . $data['crit'] . '; ';
             $perfdata .= 'Free=' . $data['response']->data->storage->$mountpoint->free . 'GB;' . round( $data['response']->data->storage->$mountpoint->total - ($data['response']->data->storage->$mountpoint->total * ($data['warn']/100) ),2) . ';' . round( $data['response']->data->storage->$mountpoint->total - ($data['response']->data->storage->$mountpoint->total * ($data['crit']/100)),2) . '; ';
             if ($data['response']->data->storage->$mountpoint->percent > $data['crit']) {
-              echo 'Disk Usage: ' . $data['response']->data->storage->$mountpoint->percent . '% (' . $mountpoint . ')' . $perfdata;
+              echo $data['response']->data->storage->$mountpoint->percent . '% (' . $mountpoint . ')' . $perfdata;
               exit(2);
             } else if ($data['response']->data->storage->$mountpoint->percent > $data['warn']) {
-              echo 'Disk Usage: ' . $data['response']->data->storage->$mountpoint->percent . '% (' . $mountpoint . ')' . $perfdata;
+              echo $data['response']->data->storage->$mountpoint->percent . '% (' . $mountpoint . ')' . $perfdata;
               exit(1);
             } else {
-              echo 'Disk Usage: ' . $data['response']->data->storage->$mountpoint->percent . '% (' . $mountpoint . ')' . $perfdata;
+              echo $data['response']->data->storage->$mountpoint->percent . '% (' . $mountpoint . ')' . $perfdata;
               exit(0);
             }
           } else {
@@ -183,39 +184,39 @@
           exit(3);
         }
         if ($data['response']->data->network->total->rx > $data['crit'] || $data['response']->data->network->total->tx > $data['crit']) {
-          echo 'Network: ' . $data['response']->data->network->total->rx . ' Mb/s Down / ' . $data['response']->data->network->total->tx . ' Mb/s Up';
+          echo $data['response']->data->network->total->rx . ' Mb/s Down / ' . $data['response']->data->network->total->tx . ' Mb/s Up';
           exit(2);
         } else if ($data['response']->data->network->total->rx > $data['warn'] || $data['response']->data->network->total->tx > $data['warn']) {
-          echo 'Network: ' . $data['response']->data->network->total->rx . ' Mb/s Down / ' . $data['response']->data->network->total->tx . ' Mb/s Up';
+          echo $data['response']->data->network->total->rx . ' Mb/s Down / ' . $data['response']->data->network->total->tx . ' Mb/s Up';
           exit(1);
         } else {
-          echo 'Network: ' . $data['response']->data->network->total->rx . ' Mb/s Down / ' . $data['response']->data->network->total->tx . ' Mb/s Up';
+          echo $data['response']->data->network->total->rx . ' Mb/s Down / ' . $data['response']->data->network->total->tx . ' Mb/s Up';
           exit(0);
         }
         break;
 
       case 'netrx':
         if ($data['response']->data->network->total->rx > $data['crit']) {
-          echo 'Network: ' . $data['response']->data->network->total->rx . ' Mb/s Down';
+          echo $data['response']->data->network->total->rx . ' Mb/s Down';
           exit(2);
         } else if ($data['response']->data->network->total->rx > $data['warn']) {
-          echo 'Network: ' . $data['response']->data->network->total->rx . ' Mb/s Down';
+          echo $data['response']->data->network->total->rx . ' Mb/s Down';
           exit(1);
         } else {
-          echo 'Network: ' . $data['response']->data->network->total->rx . ' Mb/s Down';
+          echo $data['response']->data->network->total->rx . ' Mb/s Down';
           exit(0);
         }
         break;
 
       case 'nettx':
         if ($data['response']->data->network->total->tx > $data['crit']) {
-          echo 'Network: ' . $data['response']->data->network->total->tx . ' Mb/s Up';
+          echo $data['response']->data->network->total->tx . ' Mb/s Up';
           exit(2);
         } else if ($data['response']->data->network->total->tx > $data['warn']) {
-          echo 'Network: ' . $data['response']->data->network->total->tx . ' Mb/s Up';
+          echo $data['response']->data->network->total->tx . ' Mb/s Up';
           exit(1);
         } else {
-          echo 'Network: ' . $data['response']->data->network->total->tx . ' Mb/s Up';
+          echo $data['response']->data->network->total->tx . ' Mb/s Up';
           exit(0);
         }
         break;

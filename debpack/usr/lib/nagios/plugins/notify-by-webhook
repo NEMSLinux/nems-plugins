@@ -1,0 +1,203 @@
+#!/usr/bin/env php
+<?php
+
+/* Arguments containing Nagios Alert/Notification Info */
+array_shift($argv);
+$f_notify_type =array_shift($argv);  /*1*/
+$f_name =array_shift($argv);  /*2*/
+$f_alias =array_shift($argv);  /*3*/
+$f_state =array_shift($argv);  /*4*/
+$f_address =array_shift($argv);  /*5*/
+$f_output =array_shift($argv);  /*6*/
+$f_long_date =array_shift($argv);  /*7*/
+$f_to  =array_shift($argv);  /*8*/
+$f_totalup  =array_shift($argv);  /*9*/
+$f_totaldown=array_shift($argv);  /*10*/
+$f_ackauthor= array_shift($argv);  /*11*/
+$f_ackcomment= array_shift($argv);  /*12*/
+$f_long_datetime= array_shift($argv);  /*13*/
+$f_duration= array_shift($argv);  /*14*/
+$f_duration_sec= array_shift($argv);  /*15*/
+$f_last_state_check= array_shift($argv);  /*16*/
+$f_last_state_change= array_shift($argv);  /*17*/
+$f_notification_escalation_state= array_shift($argv);  /*18*/
+$f_attempt_state= array_shift($argv);  /*19*/
+$f_max_host_attempt_state= array_shift($argv);  /*20*/
+$f_all_recipients= array_shift($argv);  /*21*/
+
+$f_date_year = date("Y");
+
+if (strlen($f_notify_type) == 0) exit('Please see the documentation.' . PHP_EOL);
+
+/* Load from NEMS Config */
+$nems['alias'] = trim(shell_exec('/usr/local/bin/nems-info alias'));
+$resource = file('/usr/local/nagios/etc/resource.cfg');
+if (is_array($resource)) {
+  foreach ($resource as $line) {
+    if (strstr($line,'$=')) {
+      $tmp = explode('$=',$line);
+      if (substr(trim($tmp[0]),0,1) == '$') { // omit comments (eg., starts with # instead of $)
+        $variable_name = str_replace('$','',trim($tmp[0]));
+        $nems['resource'][$variable_name] = trim($tmp[1]);
+      }
+    }
+  }
+}
+$nems['HOSTADDRESS'] = shell_exec('/usr/local/bin/nems-info ip');
+$nems['HOSTNAME'] = shell_exec('hostname');
+$nems['WEBHOOK'] = shell_exec('/usr/local/bin/nems-info webhook');
+
+$LONGDATETIME = date('r');
+
+if (isset($f_state) && strlen($nems['WEBHOOK']) > 0) {
+
+$alias = trim(shell_exec('/usr/local/bin/nems-info alias'));
+$nemsver = trim(shell_exec('/usr/local/bin/nems-info nemsver'));
+
+$light_cdn = 'https://cdn.zecheriah.com/nems/img/lights/';
+$stateup = strtoupper($f_state);
+switch ($stateup) {
+  case 'OK':
+    $color='green';
+    $colorHex='#33ff33';
+    $stateText = 'OK';
+    break;
+
+  case 'WARNING':
+    $color='yellow';
+    $colorHex='#ffff33';
+    $stateText = 'in a warning state';
+    break;
+
+  case 'UNKNOWN':
+    $color='yellow';
+    $colorHex='#ffff33';
+    $stateText = 'is in an unknown state';
+    break;
+
+  case 'CRITICAL':
+    $color='red';
+    $colorHex='ff3333';
+    $stateText = 'is in a critical state';
+    break;
+
+  default:
+    $color='yellow';
+    $colorHex='#ffff33';
+    $stateText = 'is in an unknown state';
+
+}
+
+$currentissueshead = $f_name . ' is ' . $stateText;
+$currentissues = $f_output;
+
+if (!isset($fieldsarray)) {
+  $fieldsarray[] = array(
+    'name' => 'No Info',
+    'value' => 'Something is up.',
+    'inline' => false
+  );
+}
+
+if (!class_exists('RemoteResult')) {
+  class RemoteResult {
+    public $name;
+    public $value;
+    public $inline;
+
+    public function __construct($name, $value, $inline) {
+        $this->name = $name;
+        $this->value = $value;
+        $this->inline = $inline;
+    }
+
+    public function toJson() {
+        return [
+            'name' => $this->name,
+            'value' => $this->value,
+            'inline' => $this->inline,
+        ];
+    }
+  }
+}
+
+$output = [];
+
+foreach ($fieldsarray as $input) {
+    array_push($output, new RemoteResult($input['name'], $input['value'], $input['inline']));
+}
+
+// Create the webhook object
+$hookObject = new stdClass();
+
+if (strstr($nems['WEBHOOK'],'office.com')) { // MS Office 365 / Teams: https://docs.microsoft.com/en-us/outlook/actionable-messages/send-via-connectors
+  $nemsstate = trim($currentissueshead);
+  $hookObject = [
+    "@type" => "MessageCard",
+    "@context" => "http://schema.org/extensions",
+    "themeColor" => $colorHex,
+    "summary" => $nemsstate,
+    "sections" => [
+        [
+            "activitySubtitle" => "Reported by $alias | <a href=\"https://nemslinux.com/\" target=\"_blank\">NEMS Linux $nemsver</a>",
+            "markdown" => true,
+        ]
+    ],
+    "text" => '<font color="#' . $colorHex . '">' . $nemsstate . '</font>' . $currentissues . '<hr />'
+
+];
+
+} elseif (strstr($nems['WEBHOOK'],'slack.com')) { // Slack
+
+  $nemsstate = trim('NEMS ' . $currentissueshead);
+  $hookObject->username = 'NEMS ' . strtoupper($f_state);
+  $hookObject->icon_url = $light_cdn . $color . '.png';
+  $hookObject->text = "*$nemsstate*\n\n" . str_replace(PHP_EOL,"\n\n",$currentissues) . "\n\n*Reporting Server:* $alias\n\n*Timestamp:* " . date('c') . "\n\nPowered by <https://nemslinux.com/|NEMS Linux $nemsver>";
+
+} elseif ( strstr($nems['WEBHOOK'],'discord.com') || strstr($nems['WEBHOOK'],'discordapp.com') )  { // Discord
+  $hookObject->content = strtoupper($f_state);
+  $hookObject->username = 'NEMS ' . strtoupper($f_state);
+  $hookObject->avatar_url = $light_cdn . $color . '.png';
+  $hookObject->tts = false;
+
+  $hookObject->embeds = array();
+  $hookObject->embeds[0] = array();
+  $hookObject->embeds[0]['title'] = $currentissueshead;
+  $hookObject->embeds[0]['type'] = 'rich';
+  $hookObject->embeds[0]['description'] = '';
+  $hookObject->embeds[0]['timestamp'] = date('c');
+  $hookObject->embeds[0]['color'] = hexdec('FFFFFF');
+
+  $hookObject->embeds[0]['author'] = new stdClass();
+  $hookObject->embeds[0]['author']->name = 'Reporting Server: ' . $alias;
+
+  $hookObject->embeds[0]['footer'] = new stdClass();
+  $hookObject->embeds[0]['footer']->text = 'Powered by NEMS Linux ' . $nemsver;
+
+  $hookObject->embeds[0]['fields'] = $output;
+} else {
+  echo 'Unsupported Webhook.';
+  exit();
+}
+
+
+
+$ch = curl_init();
+
+$hookObjectJSON = json_encode($hookObject, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE );
+
+curl_setopt_array( $ch, [
+    CURLOPT_URL => $nems['WEBHOOK'],
+    CURLOPT_POST => true,
+    CURLOPT_POSTFIELDS => $hookObjectJSON,
+    CURLOPT_HTTPHEADER => [
+        "Length: " . strlen( $hookObjectJSON ) . ',',
+        "Content-Type: application/json"
+    ]
+]);
+
+$response = curl_exec( $ch );
+curl_close( $ch );
+
+}
+?>
