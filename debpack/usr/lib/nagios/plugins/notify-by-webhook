@@ -1,6 +1,5 @@
 #!/usr/bin/env php
 <?php
-
 /* Arguments containing Nagios Alert/Notification Info */
 array_shift($argv);
 $f_notify_type =array_shift($argv);  /*1*/
@@ -43,9 +42,9 @@ if (is_array($resource)) {
     }
   }
 }
-$nems['HOSTADDRESS'] = shell_exec('/usr/local/bin/nems-info ip');
-$nems['HOSTNAME'] = shell_exec('hostname');
-$nems['WEBHOOK'] = shell_exec('/usr/local/bin/nems-info webhook');
+$nems['HOSTADDRESS'] = trim(shell_exec('/usr/local/bin/nems-info ip'));
+$nems['HOSTNAME'] = trim(shell_exec('hostname'));
+$nems['WEBHOOK'] = trim(shell_exec('/usr/local/bin/nems-info webhook'));
 
 $LONGDATETIME = date('r');
 
@@ -54,10 +53,13 @@ if (isset($f_state) && strlen($nems['WEBHOOK']) > 0) {
 $alias = trim(shell_exec('/usr/local/bin/nems-info alias'));
 $nemsver = trim(shell_exec('/usr/local/bin/nems-info nemsver'));
 
+$statetype = $f_notify_type;
+
 $light_cdn = 'https://cdn.zecheriah.com/nems/img/lights/';
 $stateup = strtoupper($f_state);
 switch ($stateup) {
   case 'OK':
+  case 'UP':
     $color='green';
     $colorHex='#33ff33';
     $stateText = 'OK';
@@ -66,30 +68,29 @@ switch ($stateup) {
   case 'WARNING':
     $color='yellow';
     $colorHex='#ffff33';
-    $stateText = 'in a warning state';
-    break;
-
-  case 'UNKNOWN':
-    $color='yellow';
-    $colorHex='#ffff33';
-    $stateText = 'is in an unknown state';
+    $stateText = 'in a <b><font color="#' . $colorHex . '">WARNING</font></b> state';
     break;
 
   case 'CRITICAL':
+  case 'DOWN':
     $color='red';
     $colorHex='ff3333';
-    $stateText = 'is in a critical state';
+    $stateText = 'in a <b><font color="#' . $colorHex . '">CRITICAL</font></b> state';
     break;
 
+  case 'UNKNOWN':
+  case 'UNREACHABLE':
   default:
     $color='yellow';
     $colorHex='#ffff33';
-    $stateText = 'is in an unknown state';
+    $stateText = 'in an <b><font color="#' . $colorHex . '">UNKNOWN</foont></b> state';
+    break;
+
 
 }
 
 $currentissueshead = $f_name . ' is ' . $stateText;
-$currentissues = $f_output;
+$currentissues = trim($f_output);
 
 if (!isset($fieldsarray)) {
   $fieldsarray[] = array(
@@ -140,10 +141,11 @@ if (strstr($nems['WEBHOOK'],'office.com')) { // MS Office 365 / Teams: https://d
     "sections" => [
         [
             "activitySubtitle" => "Reported by $alias | <a href=\"https://nemslinux.com/\" target=\"_blank\">NEMS Linux $nemsver</a>",
+            "activityImage" => $light_cdn . $color . '.png',
             "markdown" => true,
         ]
     ],
-    "text" => '<font color="#' . $colorHex . '">' . $nemsstate . '</font>' . $currentissues . '<hr />'
+    "text" => '<b>' . trim($nemsstate) . '</b><br />' . trim($currentissues) . '<hr />'
 
 ];
 
@@ -198,6 +200,5 @@ curl_setopt_array( $ch, [
 
 $response = curl_exec( $ch );
 curl_close( $ch );
-
 }
 ?>
