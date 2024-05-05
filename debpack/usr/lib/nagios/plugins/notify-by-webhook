@@ -53,7 +53,49 @@ if (isset($f_state) && strlen($nems['WEBHOOK']) > 0) {
 $alias = trim(shell_exec('/usr/local/bin/nems-info alias'));
 $nemsver = trim(shell_exec('/usr/local/bin/nems-info nemsver'));
 
-$statetype = $f_notify_type;
+switch ($f_notify_type) {
+
+  case 'FLAPPINGSTART':
+    $statetype = 'Started Flapping';
+    break;
+
+  case 'FLAPPINGSTOP':
+    $statetype = 'Stopped Flapping';
+    break;
+
+  case 'PROBLEM':
+    $statetype = 'Problem';
+    break;
+
+  case 'RECOVERY':
+    $statetype = 'Recovered';
+    break;
+
+  case 'ACKNOWLEDGEMENT':
+    $statetype = 'Acknowledged';
+    break;
+
+  case 'FLAPPINGDISABLED':
+    $statetype = 'Flapping Disabled';
+    break;
+
+  case 'DOWNTIMESTART':
+    $statetype = 'Entered Scheduled Downtime';
+    break;
+
+  case 'DOWNTIMESTOP':
+    $statetype = 'Scheduled Downtime has Ended';
+    break;
+
+  case 'DOWNTIMECANCELLED':
+    $statetype = 'Scheduled Downtime has been Cancelled';
+    break;
+
+  default:
+    $statetype = $f_notify_type;
+    break;
+
+}
 
 $light_cdn = 'https://cdn.zecheriah.com/nems/img/lights/';
 $stateup = strtoupper($f_state);
@@ -62,7 +104,7 @@ switch ($stateup) {
   case 'UP':
     $color='green';
     $colorHex='#33ff33';
-    $stateText = 'OK';
+    $stateText = '<b><font color="#' . $colorHex . '">OK</font></b>';
     break;
 
   case 'WARNING':
@@ -83,13 +125,12 @@ switch ($stateup) {
   default:
     $color='yellow';
     $colorHex='#ffff33';
-    $stateText = 'in an <b><font color="#' . $colorHex . '">UNKNOWN</foont></b> state';
+    $stateText = 'in an <b><font color="#' . $colorHex . '">UNKNOWN</font></b> state';
     break;
-
 
 }
 
-$currentissueshead = $f_name . ' is ' . $stateText;
+$currentissueshead = '<b><font color="#' . $colorHex . '">' . trim(strtoupper($statetype)) . '</font></b><br /><br /><b>' . trim($f_name) . '</b> is ' . trim($stateText) . '.';
 $currentissues = trim($f_output);
 
 if (!isset($fieldsarray)) {
@@ -145,7 +186,7 @@ if (strstr($nems['WEBHOOK'],'office.com')) { // MS Office 365 / Teams: https://d
             "markdown" => true,
         ]
     ],
-    "text" => '<b>' . trim($nemsstate) . '</b><br />' . trim($currentissues) . '<hr />'
+    "text" => trim($nemsstate) . '<br /><br />' . trim($currentissues) . '<hr />'
 
 ];
 

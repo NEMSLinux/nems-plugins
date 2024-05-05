@@ -6,6 +6,8 @@
   check_nems_php_agent
   Written by Robbie Ferguson for NEMS Linux
   -----
+  1.7 - Apr 29, 2024 - Improve output of disk, including space free in GB.
+
   1.6 - Apr 1, 2024  - Remove redundant state output and test names.
                        Added perfdata to storage.
 
@@ -162,13 +164,13 @@
             $perfdata .= 'Usage=' . $data['response']->data->storage->$mountpoint->percent . '%;' . $data['warn'] . ';' . $data['crit'] . '; ';
             $perfdata .= 'Free=' . $data['response']->data->storage->$mountpoint->free . 'GB;' . round( $data['response']->data->storage->$mountpoint->total - ($data['response']->data->storage->$mountpoint->total * ($data['warn']/100) ),2) . ';' . round( $data['response']->data->storage->$mountpoint->total - ($data['response']->data->storage->$mountpoint->total * ($data['crit']/100)),2) . '; ';
             if ($data['response']->data->storage->$mountpoint->percent > $data['crit']) {
-              echo $data['response']->data->storage->$mountpoint->percent . '% (' . $mountpoint . ')' . $perfdata;
+              echo $data['response']->data->storage->$mountpoint->percent . '% Used / ' . round($data['response']->data->storage->$mountpoint->free,2) . ' GB Free (' . $mountpoint . ')' . $perfdata;
               exit(2);
             } else if ($data['response']->data->storage->$mountpoint->percent > $data['warn']) {
-              echo $data['response']->data->storage->$mountpoint->percent . '% (' . $mountpoint . ')' . $perfdata;
+              echo $data['response']->data->storage->$mountpoint->percent . '% Used / ' . round($data['response']->data->storage->$mountpoint->free,2) . ' GB Free (' . $mountpoint . ')' . $perfdata;
               exit(1);
             } else {
-              echo $data['response']->data->storage->$mountpoint->percent . '% (' . $mountpoint . ')' . $perfdata;
+              echo $data['response']->data->storage->$mountpoint->percent . '% Used / ' . round($data['response']->data->storage->$mountpoint->free,2) . ' GB Free (' . $mountpoint . ')' . $perfdata;
               exit(0);
             }
           } else {
