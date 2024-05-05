@@ -12,6 +12,7 @@ cpan -i List::Compare
 cpan -i Getopt::Long
 cpan -i Pod::Usage
 cpan -i Switch
+cpan -i JSON
 
 # Python modules required by check_netscaler.py
 # These are already installed on NEMS Linux
