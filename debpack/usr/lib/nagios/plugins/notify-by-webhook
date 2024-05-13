@@ -1,5 +1,20 @@
 #!/usr/bin/env php
 <?php
+/*
+
+  notify-by-webhook for NEMS Linux
+
+  (c) 2024 By Robbie Ferguson https://nemslinux.com/
+
+  License: https://www.gnu.org/licenses/gpl-3.0.txt
+
+  Version History:
+
+    - 2024-05-13 - 1.0
+      Initial numbered release. Includes improvements to "Acknowledged" notification.
+
+*/
+
 /* Arguments containing Nagios Alert/Notification Info */
 array_shift($argv);
 $f_notify_type =array_shift($argv);  /*1*/
@@ -53,52 +68,9 @@ if (isset($f_state) && strlen($nems['WEBHOOK']) > 0) {
 $alias = trim(shell_exec('/usr/local/bin/nems-info alias'));
 $nemsver = trim(shell_exec('/usr/local/bin/nems-info nemsver'));
 
-switch ($f_notify_type) {
-
-  case 'FLAPPINGSTART':
-    $statetype = 'Started Flapping';
-    break;
-
-  case 'FLAPPINGSTOP':
-    $statetype = 'Stopped Flapping';
-    break;
-
-  case 'PROBLEM':
-    $statetype = 'Problem';
-    break;
-
-  case 'RECOVERY':
-    $statetype = 'Recovered';
-    break;
-
-  case 'ACKNOWLEDGEMENT':
-    $statetype = 'Acknowledged';
-    break;
-
-  case 'FLAPPINGDISABLED':
-    $statetype = 'Flapping Disabled';
-    break;
-
-  case 'DOWNTIMESTART':
-    $statetype = 'Entered Scheduled Downtime';
-    break;
-
-  case 'DOWNTIMESTOP':
-    $statetype = 'Scheduled Downtime has Ended';
-    break;
-
-  case 'DOWNTIMECANCELLED':
-    $statetype = 'Scheduled Downtime has been Cancelled';
-    break;
-
-  default:
-    $statetype = $f_notify_type;
-    break;
-
-}
-
 $light_cdn = 'https://cdn.zecheriah.com/nems/img/lights/';
 $stateup = strtoupper($f_state);
+
 switch ($stateup) {
   case 'OK':
   case 'UP':
@@ -132,6 +104,53 @@ switch ($stateup) {
 
 $currentissueshead = '<b><font color="#' . $colorHex . '">' . trim(strtoupper($statetype)) . '</font></b><br /><br /><b>' . trim($f_name) . '</b> is ' . trim($stateText) . '.';
 $currentissues = trim($f_output);
+
+
+switch ($f_notify_type) {
+
+  case 'FLAPPINGSTART':
+    $statetype = 'Started Flapping';
+    break;
+
+  case 'FLAPPINGSTOP':
+    $statetype = 'Stopped Flapping';
+    break;
+
+  case 'PROBLEM':
+    $statetype = 'Problem';
+    break;
+
+  case 'RECOVERY':
+    $statetype = 'Recovered';
+    break;
+
+  case 'ACKNOWLEDGEMENT':
+    $statetype = 'Acknowledged';
+    if (strlen(trim($f_ackcomment)) > 0) $currentissues .= '<br /><br /><b>Comment:</b> ' . $f_ackcomment;
+    if (strlen(trim($f_ackauthor)) > 0 && $f_ackauthor != 'anonymous') $currentissues .= ' - <i>' . $f_ackauthor . '</i>';
+    break;
+
+  case 'FLAPPINGDISABLED':
+    $statetype = 'Flapping Disabled';
+    break;
+
+  case 'DOWNTIMESTART':
+    $statetype = 'Entered Scheduled Downtime';
+    break;
+
+  case 'DOWNTIMESTOP':
+    $statetype = 'Scheduled Downtime has Ended';
+    break;
+
+  case 'DOWNTIMECANCELLED':
+    $statetype = 'Scheduled Downtime has been Cancelled';
+    break;
+
+  default:
+    $statetype = $f_notify_type;
+    break;
+
+}
 
 if (!isset($fieldsarray)) {
   $fieldsarray[] = array(
@@ -242,4 +261,3 @@ curl_setopt_array( $ch, [
 $response = curl_exec( $ch );
 curl_close( $ch );
 }
-?>
