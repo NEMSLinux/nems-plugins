@@ -12,6 +12,7 @@
 
     - 2024-05-13 - 1.0
       Initial numbered release. Includes improvements to "Acknowledged" notification.
+      Truncate long usernames for Discord webhook.
 
 */
 
@@ -218,7 +219,7 @@ if (strstr($nems['WEBHOOK'],'office.com')) { // MS Office 365 / Teams: https://d
 
 } elseif ( strstr($nems['WEBHOOK'],'discord.com') || strstr($nems['WEBHOOK'],'discordapp.com') )  { // Discord
   $hookObject->content = strtoupper($f_state);
-  $hookObject->username = 'NEMS ' . strtoupper($f_state);
+  $hookObject->username = mb_strimwidth('NEMS ' . strtoupper($f_state), 0,77, '...');
   $hookObject->avatar_url = $light_cdn . $color . '.png';
   $hookObject->tts = false;
 
