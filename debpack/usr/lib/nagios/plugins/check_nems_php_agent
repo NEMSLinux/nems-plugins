@@ -6,6 +6,10 @@
   check_nems_php_agent
   Written by Robbie Ferguson for NEMS Linux
   -----
+  1.8 - May 13, 2024 - Improve output of CPU Load, add perfdata, improve error
+                       output if response code is not 200, increased timeout.
+                       Optimize CURL call to only execute once.
+
   1.7 - Apr 29, 2024 - Improve output of disk, including space free in GB.
 
   1.6 - Apr 1, 2024  - Remove redundant state output and test names.
@@ -71,32 +75,155 @@
   $decryptionkey = openssl_encrypt($php_agent_key,"AES-128-ECB",base64_encode(':' . $php_agent_key . ':'));
 
   // Set connection timeout
-    $timeout = 5;
+    $timeout = 45;
 
-  // Get the remote header
+  // Get the remote header and response
     $ch = curl_init();
-    curl_setopt($ch, CURLOPT_HEADER, true);
+    curl_setopt($ch, CURLOPT_HEADER, false); // Don't include header in output
     curl_setopt($ch, CURLOPT_URL, $data['url']);
-    curl_setopt($ch, CURLOPT_POST, TRUE);
-    $postfields = array('check'=>$data['check'],'switch'=>$data['switch']);
-    curl_setopt($ch, CURLOPT_POSTFIELDS,$postfields);
+    curl_setopt($ch, CURLOPT_POST, true);
+    $postfields = array('check' => $data['check'], 'switch' => $data['switch']);
+    curl_setopt($ch, CURLOPT_POSTFIELDS, $postfields);
     curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1);
     curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, $timeout);
     curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
     $response = curl_exec($ch);
-    $httpcode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    $httpcode = curl_getinfo($ch, CURLINFO_HTTP_CODE); // Get HTTP code
+    curl_close($ch);
 
   // Stop if header is anything other than 'found'
     if ($httpcode != 200) {
-      echo 'NEMS PHP Server Agent not found at provided URL (' . $httpcode . ').';
+        switch ($httpcode) {
+            case 0:
+                $httpresponse = "No response received";
+                break;
+            case 100:
+                $httpresponse = "Continue";
+                break;
+            case 101:
+                $httpresponse = "Switching Protocols";
+                break;
+            case 200:
+                $httpresponse = "OK";
+                break;
+            case 201:
+                $httpresponse = "Created";
+                break;
+            case 202:
+                $httpresponse = "Accepted";
+                break;
+            case 203:
+                $httpresponse = "Non-Authoritative Information";
+                break;
+            case 204:
+                $httpresponse = "No Content";
+                break;
+            case 205:
+                $httpresponse = "Reset Content";
+                break;
+            case 206:
+                $httpresponse = "Partial Content";
+                break;
+            case 300:
+                $httpresponse = "Multiple Choices";
+                break;
+            case 301:
+                $httpresponse = "Moved Permanently";
+                break;
+            case 302:
+                $httpresponse = "Found";
+                break;
+            case 303:
+                $httpresponse = "See Other";
+                break;
+            case 304:
+                $httpresponse = "Not Modified";
+                break;
+            case 305:
+                $httpresponse = "Use Proxy";
+                break;
+            case 307:
+                $httpresponse = "Temporary Redirect";
+                break;
+            case 400:
+                $httpresponse = "Bad Request";
+                break;
+            case 401:
+                $httpresponse = "Unauthorized";
+                break;
+            case 402:
+                $httpresponse = "Payment Required";
+                break;
+            case 403:
+                $httpresponse = "Forbidden";
+                break;
+            case 404:
+                $httpresponse = "Not Found";
+                break;
+            case 405:
+                $httpresponse = "Method Not Allowed";
+                break;
+            case 406:
+                $httpresponse = "Not Acceptable";
+                break;
+            case 407:
+                $httpresponse = "Proxy Authentication Required";
+                break;
+            case 408:
+                $httpresponse = "Request Timeout";
+                break;
+            case 409:
+                $httpresponse = "Conflict";
+                break;
+            case 410:
+                $httpresponse = "Gone";
+                break;
+            case 411:
+                $httpresponse = "Length Required";
+                break;
+            case 412:
+                $httpresponse = "Precondition Failed";
+                break;
+            case 413:
+                $httpresponse = "Request Entity Too Large";
+                break;
+            case 414:
+                $httpresponse = "Request-URI Too Long";
+                break;
+            case 415:
+                $httpresponse = "Unsupported Media Type";
+                break;
+            case 416:
+                $httpresponse = "Requested Range Not Satisfiable";
+                break;
+            case 417:
+                $httpresponse = "Expectation Failed";
+                break;
+            case 500:
+                $httpresponse = "Internal Server Error";
+                break;
+            case 501:
+                $httpresponse = "Not Implemented";
+                break;
+            case 502:
+                $httpresponse = "Bad Gateway";
+                break;
+            case 503:
+                $httpresponse = "Service Unavailable";
+                break;
+            case 504:
+                $httpresponse = "Gateway Timeout";
+                break;
+            case 505:
+                $httpresponse = "HTTP Version Not Supported";
+                break;
+            default:
+                $httpresponse = "Unknown response code: " . $httpcode;
+                break;
+        }
+      echo 'NEMS PHP Server Agent not found at provided URL (' . $httpresponse . ').';
       exit(3);
     }
-
-  // Get the remote response
-    curl_setopt($ch, CURLOPT_HEADER, false);
-    curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1);
-    $response = curl_exec($ch);
-    curl_close($ch);
 
   $data['response'] = json_decode($response);
   if (!is_object($data['response'])) {
@@ -127,13 +254,13 @@
 
       case 'load':
         if ($data['response']->data->cpu->loadaverage->{15} > $data['crit']) {
-          echo $data['response']->data->cpu->loadaverage->{15};
+          echo $data['response']->data->cpu->loadaverage->{15} . "%|load15=" . $data['response']->data->cpu->loadaverage->{15} . "%;{$data['warn']};{$data['crit']} load5=" . $data['response']->data->cpu->loadaverage->{5} . "% load1=" . $data['response']->data->cpu->loadaverage->{1} . "%";
           exit(2);
         } else if ($data['response']->data->cpu->loadaverage->{15} > $data['warn']) {
-          echo $data['response']->data->cpu->loadaverage->{15};
+          echo $data['response']->data->cpu->loadaverage->{15} . "%|load15=" . $data['response']->data->cpu->loadaverage->{15} . "%;{$data['warn']};{$data['crit']} load5=" . $data['response']->data->cpu->loadaverage->{5} . "% load1=" . $data['response']->data->cpu->loadaverage->{1} . "%";
           exit(1);
         } else {
-          echo $data['response']->data->cpu->loadaverage->{15};
+          echo $data['response']->data->cpu->loadaverage->{15} . "%|load15=" . $data['response']->data->cpu->loadaverage->{15} . "%;{$data['warn']};{$data['crit']} load5=" . $data['response']->data->cpu->loadaverage->{5} . "% load1=" . $data['response']->data->cpu->loadaverage->{1} . "%";
           exit(0);
         }
         break;
