@@ -10,6 +10,9 @@
 
   Version History:
 
+    - 2024-06-03 - 1.1
+      Log webhook errors to /var/log/nems/webhook.log
+
     - 2024-05-13 - 1.0
       Initial numbered release. Includes improvements to "Acknowledged" notification.
       Truncate long usernames for Discord webhook.
@@ -260,5 +263,10 @@ curl_setopt_array( $ch, [
 ]);
 
 $response = curl_exec( $ch );
+if (curl_errno($ch)) {
+  $error = curl_error($ch);
+  $error_msg = date('r') . ' | Webhook Error | Payload: ' . $hookObjectJSON . ' | Error: ' . $error_msg;
+  file_put_contents('/var/log/nems/webhook.log', $error_msg, FILE_APPEND | LOCK_EX);
+}
 curl_close( $ch );
 }
