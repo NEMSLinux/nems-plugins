@@ -6,6 +6,10 @@
   check_nems_php_agent
   Written by Robbie Ferguson for NEMS Linux
   -----
+  1.9 - Jun 30, 2024 - Fix warn/crit values to float (to accommodate, for example,
+                       load warning at 0.6). Round output to appropriate number of
+                       decimal places for several checks.
+
   1.8 - May 13, 2024 - Improve output of CPU Load, add perfdata, improve error
                        output if response code is not 200, increased timeout.
                        Optimize CURL call to only execute once.
@@ -46,8 +50,8 @@
 
   if (count($argv) >=5) {
     array_shift($argv);
-    $data['warn'] = intval(array_shift($argv));
-    $data['crit'] = intval(array_shift($argv));
+    $data['warn'] = floatval(array_shift($argv));
+    $data['crit'] = floatval(array_shift($argv));
     $data['url'] = trim(array_shift($argv));
     $data['check'] = trim(array_shift($argv));
     $data['switch'] = trim(array_shift($argv)); // a final switch variable
@@ -251,29 +255,28 @@
 
   // Run the checks against the received data
     switch ($data['check']) {
-
       case 'load':
         if ($data['response']->data->cpu->loadaverage->{15} > $data['crit']) {
-          echo $data['response']->data->cpu->loadaverage->{15} . "%|load15=" . $data['response']->data->cpu->loadaverage->{15} . "%;{$data['warn']};{$data['crit']} load5=" . $data['response']->data->cpu->loadaverage->{5} . "% load1=" . $data['response']->data->cpu->loadaverage->{1} . "%";
+          echo round($data['response']->data->cpu->loadaverage->{15},2) . "%|load15=" . $data['response']->data->cpu->loadaverage->{15} . "%;{$data['warn']};{$data['crit']} load5=" . $data['response']->data->cpu->loadaverage->{5} . "% load1=" . $data['response']->data->cpu->loadaverage->{1} . "%";
           exit(2);
         } else if ($data['response']->data->cpu->loadaverage->{15} > $data['warn']) {
-          echo $data['response']->data->cpu->loadaverage->{15} . "%|load15=" . $data['response']->data->cpu->loadaverage->{15} . "%;{$data['warn']};{$data['crit']} load5=" . $data['response']->data->cpu->loadaverage->{5} . "% load1=" . $data['response']->data->cpu->loadaverage->{1} . "%";
+          echo round($data['response']->data->cpu->loadaverage->{15},2) . "%|load15=" . $data['response']->data->cpu->loadaverage->{15} . "%;{$data['warn']};{$data['crit']} load5=" . $data['response']->data->cpu->loadaverage->{5} . "% load1=" . $data['response']->data->cpu->loadaverage->{1} . "%";
           exit(1);
         } else {
-          echo $data['response']->data->cpu->loadaverage->{15} . "%|load15=" . $data['response']->data->cpu->loadaverage->{15} . "%;{$data['warn']};{$data['crit']} load5=" . $data['response']->data->cpu->loadaverage->{5} . "% load1=" . $data['response']->data->cpu->loadaverage->{1} . "%";
+          echo round($data['response']->data->cpu->loadaverage->{15},2) . "%|load15=" . $data['response']->data->cpu->loadaverage->{15} . "%;{$data['warn']};{$data['crit']} load5=" . $data['response']->data->cpu->loadaverage->{5} . "% load1=" . $data['response']->data->cpu->loadaverage->{1} . "%";
           exit(0);
         }
         break;
 
       case 'mem':
         if ($data['response']->data->mem->percent > $data['crit']) {
-          echo $data['response']->data->mem->percent . '%';
+          echo round($data['response']->data->mem->percent,1) . '%';
           exit(2);
         } else if ($data['response']->data->mem->percent > $data['warn']) {
-          echo $data['response']->data->mem->percent . '%';
+          echo round($data['response']->data->mem->percent,1) . '%';
           exit(1);
         } else {
-          echo $data['response']->data->mem->percent . '%';
+          echo round($data['response']->data->mem->percent,1) . '%';
           exit(0);
         }
         break;
@@ -291,13 +294,13 @@
             $perfdata .= 'Usage=' . $data['response']->data->storage->$mountpoint->percent . '%;' . $data['warn'] . ';' . $data['crit'] . '; ';
             $perfdata .= 'Free=' . $data['response']->data->storage->$mountpoint->free . 'GB;' . round( $data['response']->data->storage->$mountpoint->total - ($data['response']->data->storage->$mountpoint->total * ($data['warn']/100) ),2) . ';' . round( $data['response']->data->storage->$mountpoint->total - ($data['response']->data->storage->$mountpoint->total * ($data['crit']/100)),2) . '; ';
             if ($data['response']->data->storage->$mountpoint->percent > $data['crit']) {
-              echo $data['response']->data->storage->$mountpoint->percent . '% Used / ' . round($data['response']->data->storage->$mountpoint->free,2) . ' GB Free (' . $mountpoint . ')' . $perfdata;
+              echo round($data['response']->data->storage->$mountpoint->percent,2) . '% Used / ' . round($data['response']->data->storage->$mountpoint->free,2) . ' GB Free (' . $mountpoint . ')' . $perfdata;
               exit(2);
             } else if ($data['response']->data->storage->$mountpoint->percent > $data['warn']) {
-              echo $data['response']->data->storage->$mountpoint->percent . '% Used / ' . round($data['response']->data->storage->$mountpoint->free,2) . ' GB Free (' . $mountpoint . ')' . $perfdata;
+              echo round($data['response']->data->storage->$mountpoint->percent,2) . '% Used / ' . round($data['response']->data->storage->$mountpoint->free,2) . ' GB Free (' . $mountpoint . ')' . $perfdata;
               exit(1);
             } else {
-              echo $data['response']->data->storage->$mountpoint->percent . '% Used / ' . round($data['response']->data->storage->$mountpoint->free,2) . ' GB Free (' . $mountpoint . ')' . $perfdata;
+              echo round($data['response']->data->storage->$mountpoint->percent,2) . '% Used / ' . round($data['response']->data->storage->$mountpoint->free,2) . ' GB Free (' . $mountpoint . ')' . $perfdata;
               exit(0);
             }
           } else {
