@@ -18,3 +18,6 @@ cpan -i JSON
 # These are already installed on NEMS Linux
 # - JSON
 # - Monitoring::Plugin
+
+# Check_ESXI_*
+pip install pywbem
