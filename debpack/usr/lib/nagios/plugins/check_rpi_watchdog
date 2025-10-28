@@ -1,0 +1,99 @@
+#!/usr/bin/env bash
+# check_rpi_watchdog v1.0 by Robbie Ferguson // Bald Nerd
+# 2025-10-28 https://NEMSLinux.com/
+########################
+# OK if Timeleft > 0
+# WARNING if watchdog present but not armed
+# UNKNOWN/CRITICAL otherwise.
+########################
+
+platform=$(/usr/local/bin/nems-info platform)
+
+if (( $platform >= 0 )) && (( $platform <= 9 )) || (( $platform >= 150 )) && (( $platform <= 199 )); then
+
+set -euo pipefail
+
+REQUIRE_PRESENT=0      # set to 1 if "no watchdog" should be CRITICAL
+WARN_IF_DISABLED=1     # set to 0 if presence-only should be OK
+
+ok()      { echo "$*"; exit 0; }
+warn()    { echo "$*"; exit 1; }
+crit()    { echo "$*"; exit 2; }
+unknown() { echo "$*"; exit 3; }
+
+perfd() {
+  local tl="$1" to="$2" pt="$3"
+  local parts=()
+  [[ -n "$tl" ]] && parts+=("timeleft=${tl}s")
+  [[ -n "$to" ]] && parts+=("timeout=${to}s")
+  [[ -n "$pt" ]] && parts+=("pretimeout=${pt}s")
+  if (( ${#parts[@]} )); then
+    printf ' | %s\n' "$(IFS=' '; echo "${parts[*]}")"
+  else
+    printf '\n'
+  fi
+}
+
+WDCTL="${WDCTL:-/usr/bin/wdctl}"
+[[ ! -x "$WDCTL" ]] && WDCTL="$(command -v wdctl 2>/dev/null || true)"
+[[ -z "${WDCTL}" ]] && unknown "wdctl not found"
+
+# Run wdctl with NO args (auto-detect /dev/watchdogX)
+OUT="$("$WDCTL" 2>/dev/null || true)"
+
+# Nothing found
+if [[ -z "$OUT" ]]; then
+  if [[ $REQUIRE_PRESENT -eq 1 ]]; then
+    crit "No hardware watchdog found"
+  else
+    unknown "No hardware watchdog detected on this system"
+  fi
+fi
+
+# Parse fields from wdctl's default table output
+IDENTITY="$(echo "$OUT" | awk -F: '/^Identity/  {sub(/^[[:space:]]*/,"",$2); print $2}')"
+TIMEOUT="$( echo "$OUT" | awk -F: '/^Timeout/   {gsub(/[[:space:]]*seconds/,""); sub(/^[[:space:]]*/,"",$2); print $2}')"
+TIMELEFT="$(echo "$OUT" | awk -F: '/^Timeleft/  {gsub(/[[:space:]]*seconds/,""); sub(/^[[:space:]]*/,"",$2); print $2}')"
+PRETIME="$( echo "$OUT" | awk -F: '/^Pre-timeout/{gsub(/[[:space:]]*seconds/,""); sub(/^[[:space:]]*/,"",$2); print $2}')"
+
+[[ -z "$IDENTITY" ]] && IDENTITY="unknown"
+
+# If wdctl output includes a Device line, consider the watchdog "present"
+PRESENT=0
+echo "$OUT" | grep -q '^Device:' && PRESENT=1
+
+# Armed if Timeleft is a positive integer
+if [[ -n "$TIMELEFT" && "$TIMELEFT" =~ ^[0-9]+$ && "$TIMELEFT" -gt 0 ]]; then
+  echo -n "Watchdog active, Timeout: ${TIMEOUT:-?}s, Time Remaining: ${TIMELEFT:-?}s"
+  perfd "$TIMELEFT" "$TIMEOUT" "$PRETIME"
+  # OK state
+  exit 0
+fi
+
+# Present but not counting
+if [[ $PRESENT -eq 1 ]]; then
+  if [[ $WARN_IF_DISABLED -eq 1 ]]; then
+    echo -n "Watchdog present but not enabled"
+    perfd "$TIMELEFT" "$TIMEOUT" "$PRETIME"
+    # WARNING state
+    exit 1
+  else
+    echo -n "Watchdog present"
+    perfd "$TIMELEFT" "$TIMEOUT" "$PRETIME"
+    # OK state
+    exit 0
+  fi
+fi
+
+# Not present
+if [[ $REQUIRE_PRESENT -eq 1 ]]; then
+  crit "No hardware watchdog found"
+else
+  unknown "No hardware watchdog detected on this system"
+fi
+
+else
+
+  crit "This is not a Raspberry Pi, so cannot use RPi Watchdog"
+
+fi

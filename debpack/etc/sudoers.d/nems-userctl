@@ -1,0 +1,3 @@
+# Grant nems-www access to nems-userctl
+Cmnd_Alias NEMS_USERCTL = /usr/local/sbin/nems-userctl *
+www-data ALL=(root) NOPASSWD: NEMS_USERCTL
