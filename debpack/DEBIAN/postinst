@@ -1,4 +1,6 @@
 #!/bin/bash
+set -e
+
 chown -R nagios:nagios /etc/check_wmi_plus
 java -cp /usr/lib/nagios/plugins/ibmi/nagios4i.jar com.ibm.nagios.config.Initialization
 
@@ -21,3 +23,29 @@ cpan -i JSON
 
 # Check_ESXI_*
 pip install pywbem
+
+
+# check_snmp
+
+# Detect the UID of the nagios user (fallback to 1001 if user query fails)
+NAGIOS_USER="nagios"
+NAGIOS_UID=$(id -u "$NAGIOS_USER" 2>/dev/null || echo "1001")
+
+# Build target state path expected by check_snmp
+TARGET_DIR="/usr/var/${NAGIOS_UID}"
+
+# Create the path structure
+mkdir -p "$TARGET_DIR"
+
+# Ensure nagios user owns /usr/var and the UID subfolder
+if id "$NAGIOS_USER" >/dev/null 2>&1; then
+    chown -R "$NAGIOS_USER:$NAGIOS_USER" /usr/var
+fi
+
+# Set proper working permissions for state file creation
+chmod 775 "$TARGET_DIR"
+
+# / check_snmp
+
+
+exit 0
