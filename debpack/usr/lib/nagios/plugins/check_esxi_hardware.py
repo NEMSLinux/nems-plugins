@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/opt/nems-venv/bin/python
 # -*- coding: UTF-8 -*-
 #
 # Script for checking global health of host running VMware ESX/ESXi

@@ -22,7 +22,27 @@ cpan -i JSON
 # - Monitoring::Plugin
 
 # Check_ESXI_*
-pip install pywbem
+# ----------------------------------------------------------------------
+# Set up a dedicated virtual environment to safely install pywbem and
+# updated dependencies without conflicting with Debian system packages.
+# ----------------------------------------------------------------------
+VENV_DIR="/opt/nems-venv"
+
+# Ensure Debian's python3-venv helper is installed
+if ! dpkg -s python3-venv >/dev/null 2>&1; then
+    apt-get update
+    apt-get install -y python3-venv python3-pip
+fi
+
+# Create virtual environment if it doesn't exist
+if [ ! -d "$VENV_DIR" ]; then
+    python3 -m venv --system-site-packages "$VENV_DIR"
+fi
+
+# Upgrade pip and install pywbem in the isolated environment
+"$VENV_DIR/bin/pip" install --upgrade pip
+"$VENV_DIR/bin/pip" install pywbem
+# ----------------------------------------------------------------------
 
 
 # check_snmp
