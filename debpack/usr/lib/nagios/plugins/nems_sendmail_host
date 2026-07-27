@@ -11,7 +11,7 @@ Based Upon:
 
 Reworked for NEMS Linux by Robbie Ferguson
  https://nemslinux.com
- Build: 5
+ Build: 6
 
 Used, modified and distributed in NEMS Linux
 with special permission from Heini Holm Andersen.
@@ -33,155 +33,164 @@ require '/var/www/PHPMailer/src/SMTP.php';
 
 /* Arguments containing Nagios Alert/Notification Info */
 array_shift($argv);
-$f_notify_type =array_shift($argv);  /*1*/
-$f_host_name =array_shift($argv);  /*2*/
-$f_host_alias =array_shift($argv);  /*3*/
-$f_host_state =array_shift($argv);  /*4*/
-$f_host_address =array_shift($argv);  /*5*/
-$f_host_output =array_shift($argv);  /*6*/
-$f_long_date =array_shift($argv);  /*7*/
-$f_to  =array_shift($argv);  /*8*/
-$f_totalup  =array_shift($argv);  /*9*/
-$f_totaldown=array_shift($argv);  /*10*/
-$f_ackauthor= array_shift($argv);  /*11*/
-$f_ackcomment= array_shift($argv);  /*12*/
-$f_long_datetime= array_shift($argv);  /*13*/
-$f_host_duration= array_shift($argv);  /*14*/
-$f_host_duration_sec= array_shift($argv);  /*15*/
-$f_host_last_state_check= array_shift($argv);  /*16*/
-$f_host_last_state_change= array_shift($argv);  /*17*/
-$f_notification_escalation_state= array_shift($argv);  /*18*/
-$f_host_attempt_state= array_shift($argv);  /*19*/
-$f_max_host_attempt_state= array_shift($argv);  /*20*/
-$f_all_recipients= array_shift($argv);  /*21*/
+$f_notify_type                    = array_shift($argv) ?? '';  /*1*/
+$f_host_name                      = array_shift($argv) ?? '';  /*2*/
+$f_host_alias                     = array_shift($argv) ?? '';  /*3*/
+$f_host_state                     = array_shift($argv) ?? '';  /*4*/
+$f_host_address                   = array_shift($argv) ?? '';  /*5*/
+$f_host_output                    = array_shift($argv) ?? '';  /*6*/
+$f_long_date                      = array_shift($argv) ?? '';  /*7*/
+$f_to                             = array_shift($argv) ?? '';  /*8*/
+$f_totalup                        = array_shift($argv) ?? '';  /*9*/
+$f_totaldown                      = array_shift($argv) ?? '';  /*10*/
+$f_ackauthor                      = array_shift($argv) ?? '';  /*11*/
+$f_ackcomment                     = array_shift($argv) ?? '';  /*12*/
+$f_long_datetime                  = array_shift($argv) ?? '';  /*13*/
+$f_host_duration                  = array_shift($argv) ?? '';  /*14*/
+$f_host_duration_sec              = array_shift($argv) ?? '';  /*15*/
+$f_host_last_state_check          = array_shift($argv) ?? '';  /*16*/
+$f_host_last_state_change         = array_shift($argv) ?? '';  /*17*/
+$f_notification_escalation_state  = array_shift($argv) ?? '';  /*18*/
+$f_host_attempt_state             = array_shift($argv) ?? '';  /*19*/
+$f_max_host_attempt_state         = array_shift($argv) ?? '';  /*20*/
+$f_all_recipients                 = array_shift($argv) ?? '';  /*21*/
 
 $f_date_year = date("Y");
 
 if (strlen($f_notify_type) == 0) exit('Please see the documentation.' . PHP_EOL);
 
 /* Load from NEMS Config */
-$nems['alias'] = trim(shell_exec('/usr/local/bin/nems-info alias'));
-$resource = file('/usr/local/nagios/etc/resource.cfg');
-if (is_array($resource)) {
-  foreach ($resource as $line) {
-    if (strstr($line,'$=')) {
-      $tmp = explode('$=',$line);
-      if (substr(trim($tmp[0]),0,1) == '$') { // omit comments (eg., starts with # instead of $)
-        $variable_name = str_replace('$','',trim($tmp[0]));
-        $nems['resource'][$variable_name] = trim($tmp[1]);
-      }
-    }
-  }
-}
-$nems['HOSTADDRESS'] = shell_exec('/usr/local/bin/nems-info ip');
-$nems['HOSTNAME'] = shell_exec('hostname');
-$LONGDATETIME = date('r');
+$nems = ['resource' => []];
+$nems['alias'] = trim((string)shell_exec('/usr/local/bin/nems-info alias'));
+$resource_file = '/usr/local/nagios/etc/resource.cfg';
 
-/* Defaults */
-$f_color="#5D6D7E";
-$f_ackauthor_desc="Acknowledged By:";
-$f_ackcomment_desc="Comment:";
+if (file_exists($resource_file)) {
+    $resource = file($resource_file);
+    if (is_array($resource)) {
+        foreach ($resource as $line) {
+            if (strstr($line, '$=')) {
+                $tmp = explode('$=', $line);
+                if (substr(trim($tmp[0]), 0, 1) == '$') { // omit comments
+                    $variable_name = str_replace('$', '', trim($tmp[0]));
+                    $nems['resource'][$variable_name] = trim($tmp[1] ?? '');
+                }
+            }
+        }
+    }
+}
+
+$nems['HOSTADDRESS'] = shell_exec('/usr/local/bin/nems-info ip');
+$nems['HOSTNAME']    = shell_exec('hostname');
+$LONGDATETIME        = date('r');
+
+/* Defaults & Variable Initializations */
+$f_color              = "#5D6D7E";
+$f_ackauthor_desc     = "Acknowledged By:";
+$f_ackcomment_desc    = "Comment:";
+$f_notify_type_friendly = '';
+
+$f_ackauthor_status                      = '';
+$f_ackcomment_status                     = '';
+$f_ackauthor_status_none_html            = '';
+$f_ackcomment_status_none_html           = '';
+$f_notification_escalation_state_status  = '';
+$f_notification_escalation_state_status_none_html = '';
 
 /* Build type of alert */
-if($f_notify_type=="PROBLEM") {
-  $f_color="#FF0000";
-  $f_ackauthor_desc="Acknowledged By:";
-  $f_ackcomment_desc="Comment:";
-  $f_notify_type_friendly = 'Host Problem';
+if ($f_notify_type == "PROBLEM") {
+    $f_color = "#FF0000";
+    $f_ackauthor_desc = "Acknowledged By:";
+    $f_ackcomment_desc = "Comment:";
+    $f_notify_type_friendly = 'Host Problem';
 }
-if($f_notify_type=="RECOVERY") {
-  $f_color="#006800";
-  $f_ackauthor_desc="Acknowledged By:";
-  $f_ackcomment_desc="Comment:";
-  $f_notify_type_friendly = 'Recovered';
+if ($f_notify_type == "RECOVERY") {
+    $f_color = "#006800";
+    $f_ackauthor_desc = "Acknowledged By:";
+    $f_ackcomment_desc = "Comment:";
+    $f_notify_type_friendly = 'Recovered';
 }
-if($f_notify_type=="ACKNOWLEDGEMENT") {
-  $f_color="#AEB6BF";
-  $f_ackauthor_desc="Acknowledged By:";
-  $f_ackcomment_desc="Comment:";
-  $f_notify_type_friendly = 'Problem Acknowledged';
+if ($f_notify_type == "ACKNOWLEDGEMENT") {
+    $f_color = "#AEB6BF";
+    $f_ackauthor_desc = "Acknowledged By:";
+    $f_ackcomment_desc = "Comment:";
+    $f_notify_type_friendly = 'Problem Acknowledged';
 }
-if($f_notify_type=="FLAPPINGSTART") {
-  $f_color="#800000";
-  $f_ackauthor_desc="Flapping Author:";
-  $f_ackcomment_desc="Flapping Comment:";
-  $f_notify_type_friendly = 'Host Started Flapping';
+if ($f_notify_type == "FLAPPINGSTART") {
+    $f_color = "#800000";
+    $f_ackauthor_desc = "Flapping Author:";
+    $f_ackcomment_desc = "Flapping Comment:";
+    $f_notify_type_friendly = 'Host Started Flapping';
 }
-if($f_notify_type=="FLAPPINGSTOP") {
-  $f_color="#008000";
-  $f_ackauthor_desc="Flapping Author:";
-  $f_ackcomment_desc="Flapping Comment:";
-  $f_notify_type_friendly = 'Host Has Stopped Flapping';
+if ($f_notify_type == "FLAPPINGSTOP") {
+    $f_color = "#008000";
+    $f_ackauthor_desc = "Flapping Author:";
+    $f_ackcomment_desc = "Flapping Comment:";
+    $f_notify_type_friendly = 'Host Has Stopped Flapping';
 }
-if($f_notify_type=="FLAPPINGDISABLED") {
-  $f_color="#F7FE2E";
-  $f_ackauthor_desc="Flapping Author:";
-  $f_ackcomment_desc="Flapping Comment:";
-  $f_notify_type_friendly = 'Flapping Disabled';
+if ($f_notify_type == "FLAPPINGDISABLED") {
+    $f_color = "#F7FE2E";
+    $f_ackauthor_desc = "Flapping Author:";
+    $f_ackcomment_desc = "Flapping Comment:";
+    $f_notify_type_friendly = 'Flapping Disabled';
 }
-if($f_notify_type=="DOWNTIMESTART") {
-  $f_color="#5DADE2";
-  $f_ackauthor_desc="Scheduled Downtime by:";
-  $f_ackcomment_desc="Comment for Scheduled Downtime:";
-  $f_notify_type_friendly = 'Begin Scheduled Downtime';
+if ($f_notify_type == "DOWNTIMESTART") {
+    $f_color = "#5DADE2";
+    $f_ackauthor_desc = "Scheduled Downtime by:";
+    $f_ackcomment_desc = "Comment for Scheduled Downtime:";
+    $f_notify_type_friendly = 'Begin Scheduled Downtime';
 }
-if($f_notify_type=="DOWNTIMEEND") {
-  $f_color="#48C9B0";
-  $f_ackauthor_desc="Scheduled Downtime by:";
-  $f_ackcomment_desc="Comment for Scheduled Downtime:";
-  $f_notify_type_friendly = 'End Scheduled Downtime';
+if ($f_notify_type == "DOWNTIMEEND") {
+    $f_color = "#48C9B0";
+    $f_ackauthor_desc = "Scheduled Downtime by:";
+    $f_ackcomment_desc = "Comment for Scheduled Downtime:";
+    $f_notify_type_friendly = 'End Scheduled Downtime';
 }
-if($f_notify_type=="DOWNTIMECANCELLED") {
-  $f_color="#AF7AC5";
-  $f_ackauthor_desc="Scheduled Downtime by:";
-  $f_ackcomment_desc="Comment for Scheduled Downtime:";
-  $f_notify_type_friendly = 'Scheduled Downtime Has Been Cancelled';
+if ($f_notify_type == "DOWNTIMECANCELLED") {
+    $f_color = "#AF7AC5";
+    $f_ackauthor_desc = "Scheduled Downtime by:";
+    $f_ackcomment_desc = "Comment for Scheduled Downtime:";
+    $f_notify_type_friendly = 'Scheduled Downtime Has Been Cancelled';
 }
-if($f_notify_type=="CUSTOM") {
-  $f_color="#5D6D7E";
-  $f_ackauthor_desc="Custom Author:";
-  $f_ackcomment_desc="Custom Comment:";
-  $f_notify_type_friendly = 'Custom Notification';
-}
-
-/* Check if acknowledgement is present and if so, then add HTML code */
-if($f_ackauthor!="" && $f_ackcomment!=""){
-  $f_ackauthor_status = '
-    <h4 style="font-family: CoconPro-BoldCond, Open Sans, Verdana, sans-serif; margin:0; font-size:15px; color:#b0b0b0; padding-left:3%;text-decoration:underline;">' . $f_ackauthor_desc . '</h4>
-    <h2 style="font-family: CoconPro-BoldCond, Open Sans, Verdana, sans-serif; margin:0; font-size:20px; padding-left:5%;">' . $f_ackauthor . '</h2>
-  ';
-
-  $f_ackcomment_status = '
-    <h4 style="font-family: CoconPro-BoldCond, Open Sans, Verdana, sans-serif; margin:0; font-size:15px; color:#b0b0b0; padding-left:3%;text-decoration:underline;">' . $f_ackcomment_desc . '</h4>
-    <h2 style="font-family: CoconPro-BoldCond, Open Sans, Verdana, sans-serif; margin:0; font-size:20px; padding-left:5%;">' . $f_ackcomment . '</h2>
-  ';
-
-  $f_ackauthor_status_none_html = $f_ackauthor_desc;
-  $f_ackauthor_status_none_html .= ' ';
-  $f_ackauthor_status_none_html .=  $f_ackauthor;
-
-  $f_ackcomment_status_none_html = $f_ackcomment_desc;
-  $f_ackcomment_status_none_html .= ' ';
-  $f_ackcomment_status_none_html .= $f_ackcomment;
+if ($f_notify_type == "CUSTOM") {
+    $f_color = "#5D6D7E";
+    $f_ackauthor_desc = "Custom Author:";
+    $f_ackcomment_desc = "Custom Comment:";
+    $f_notify_type_friendly = 'Custom Notification';
 }
 
 /* Check if acknowledgement is present and if so, then add HTML code */
-if($f_notification_escalation_state==0){
-  $f_notification_escalation_state_status = '
-    <h4 style="font-family: CoconPro-BoldCond, Open Sans, Verdana, sans-serif; margin:0; font-size:15px; color:#b0b0b0; padding-left:3%;text-decoration:underline;">Incident Escalated:</h4>
-    <h2 style="font-family: CoconPro-BoldCond, Open Sans, Verdana, sans-serif; margin:0; font-size:20px; padding-left:5%;">No</h2>
-  ';
+if ($f_ackauthor != "" && $f_ackcomment != "") {
+    $f_ackauthor_status = '
+        <h4 style="font-family: CoconPro-BoldCond, Open Sans, Verdana, sans-serif; margin:0; font-size:15px; color:#b0b0b0; padding-left:3%;text-decoration:underline;">' . $f_ackauthor_desc . '</h4>
+        <h2 style="font-family: CoconPro-BoldCond, Open Sans, Verdana, sans-serif; margin:0; font-size:20px; padding-left:5%;">' . $f_ackauthor . '</h2>
+    ';
 
-  $f_notification_escalation_state_status_none_html = 'Incident Escalated: No';
+    $f_ackcomment_status = '
+        <h4 style="font-family: CoconPro-BoldCond, Open Sans, Verdana, sans-serif; margin:0; font-size:15px; color:#b0b0b0; padding-left:3%;text-decoration:underline;">' . $f_ackcomment_desc . '</h4>
+        <h2 style="font-family: CoconPro-BoldCond, Open Sans, Verdana, sans-serif; margin:0; font-size:20px; padding-left:5%;">' . $f_ackcomment . '</h2>
+    ';
+
+    $f_ackauthor_status_none_html  = $f_ackauthor_desc . ' ' . $f_ackauthor;
+    $f_ackcomment_status_none_html = $f_ackcomment_desc . ' ' . $f_ackcomment;
 }
 
-if($f_notification_escalation_state==1){
-  $f_notification_escalation_state_status = '
-    <h4 style="font-family: CoconPro-BoldCond, Open Sans, Verdana, sans-serif; margin:0; font-size:15px; color:#b0b0b0; padding-left:3%;text-decoration:underline;">Incident Escalated:</h4>
-    <h2 style="font-family: CoconPro-BoldCond, Open Sans, Verdana, sans-serif; margin:0; font-size:20px; padding-left:5%;">Yes</h2>
-  ';
+/* Check if escalation is present and if so, then add HTML code */
+if ($f_notification_escalation_state === '0' || $f_notification_escalation_state === 0) {
+    $f_notification_escalation_state_status = '
+        <h4 style="font-family: CoconPro-BoldCond, Open Sans, Verdana, sans-serif; margin:0; font-size:15px; color:#b0b0b0; padding-left:3%;text-decoration:underline;">Incident Escalated:</h4>
+        <h2 style="font-family: CoconPro-BoldCond, Open Sans, Verdana, sans-serif; margin:0; font-size:20px; padding-left:5%;">No</h2>
+    ';
 
-  $f_notification_escalation_state_status_none_html = 'Incident Escalated: Yes';
+    $f_notification_escalation_state_status_none_html = 'Incident Escalated: No';
+}
+
+if ($f_notification_escalation_state === '1' || $f_notification_escalation_state === 1) {
+    $f_notification_escalation_state_status = '
+        <h4 style="font-family: CoconPro-BoldCond, Open Sans, Verdana, sans-serif; margin:0; font-size:15px; color:#b0b0b0; padding-left:3%;text-decoration:underline;">Incident Escalated:</h4>
+        <h2 style="font-family: CoconPro-BoldCond, Open Sans, Verdana, sans-serif; margin:0; font-size:20px; padding-left:5%;">Yes</h2>
+    ';
+
+    $f_notification_escalation_state_status_none_html = 'Incident Escalated: Yes';
 }
 
 /* Build the Nagios alert/notification, email body/content */
@@ -189,7 +198,7 @@ if($f_notification_escalation_state==1){
 $message = '
 ***** NEMS Linux *****
 
-Notification Type: ' .($f_notify_type_friendly ?: $f_notify_type). '
+Notification Type: ' . ($f_notify_type_friendly ?: $f_notify_type) . '
 Host: ' .$f_host_name. '
 Host Alias: ' .$f_host_alias. '
 State: ' .$f_host_state. '
@@ -270,8 +279,8 @@ $HTMLmessage = '
             -ms-interpolation-mode:bicubic;
         }
 
-        *[x-apple-data-detectors],	/* iOS */
-        .x-gmail-data-detectors, 	/* Gmail */
+        *[x-apple-data-detectors],      /* iOS */
+        .x-gmail-data-detectors,        /* Gmail */
         .x-gmail-data-detectors *,
         .aBn {
             border-bottom: 0 !important;
@@ -285,12 +294,12 @@ $HTMLmessage = '
         }
 
         .a6S {
-	        display: none !important;
-	        opacity: 0.01 !important;
+                display: none !important;
+                opacity: 0.01 !important;
         }
         img.g-img + div {
-	        display:none !important;
-	   	}
+                display:none !important;
+                }
 
         .button-link {
             text-decoration: none !important;
@@ -318,42 +327,42 @@ $HTMLmessage = '
 
         @media screen and (max-width: 600px) {
 
-			.email-container p {
-				font-size: 17px !important;
-				line-height: 22px !important;
-			}
+                        .email-container p {
+                                font-size: 17px !important;
+                                line-height: 22px !important;
+                        }
 
-		}
+                }
 
-	</style>
+        </style>
 
-	<!--[if gte mso 9]>
-	<xml>
-		<o:OfficeDocumentSettings>
-			<o:AllowPNG/>
-			<o:PixelsPerInch>96</o:PixelsPerInch>
-		</o:OfficeDocumentSettings>
-	</xml>
-	<![endif]-->
+        <!--[if gte mso 9]>
+        <xml>
+                <o:OfficeDocumentSettings>
+                        <o:AllowPNG/>
+                        <o:PixelsPerInch>96</o:PixelsPerInch>
+                </o:OfficeDocumentSettings>
+        </xml>
+        <![endif]-->
 
 </head>
 <body width="100%" bgcolor="#f6f6f6" style="margin: 0;line-height:1.4;padding:0;-ms-text-size-adjust:100%;-webkit-text-size-adjust:100%;">
-	<center style="width: 100%; background: #f6f6f6; text-align: left;">
+        <center style="width: 100%; background: #f6f6f6; text-align: left;">
 
-		<div style="display:none;font-size:1px;line-height:1px;max-height:0px;max-width:0px;opacity:0;overflow:hidden;mso-hide:all;font-family: sans-serif;">
-			[' .($f_notify_type_friendly ?: $f_notify_type). '] Host: ' .$f_host_alias. ' (' .$f_host_name. ') is ' .$f_host_state. '. ***************************************************************************************************************************************
-		</div>
+                <div style="display:none;font-size:1px;line-height:1px;max-height:0px;max-width:0px;opacity:0;overflow:hidden;mso-hide:all;font-family: sans-serif;">
+                        [' .($f_notify_type_friendly ?: $f_notify_type). '] Host: ' .$f_host_alias. ' (' .$f_host_name. ') is ' .$f_host_state. '. ***************************************************************************************************************************************
+                </div>
 
-		<div style="padding: 10px 0; margin: auto;" class="email-container">
-			<!--[if mso]>
-			<table role="presentation" cellspacing="0" cellpadding="0" border="0" width="600" align="center">
-			<tr>
-			<td>
-			<![endif]-->
+                <div style="padding: 10px 0; margin: auto;" class="email-container">
+                        <!--[if mso]>
+                        <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="600" align="center">
+                        <tr>
+                        <td>
+                        <![endif]-->
 
-			<table role="presentation" cellspacing="0" cellpadding="0" border="0" align="center" width="95%">
-				<tr>
-					<td bgcolor="#ffffff" style="border-collapse:separate;mso-table-lspace:0pt;mso-table-rspace:0pt;width:100%;-webkit-border-top-right-radius: 25px;-webkit-border-top-left-radius: 25px;-moz-border-top-right-radius: 25px;-moz-border-top-left-radius: 25px;border-top-right-radius: 25px;border-top-left-radius: 25px;-webkit-border-bottom-right-radius: 25px;-webkit-border-bottom-left-radius: 25px;-moz-border-bottom-right-radius: 25px;-moz-border-bottom-left-radius: 25px;border-bottom-right-radius: 25px;border-bottom-left-radius: 25px;">
+                        <table role="presentation" cellspacing="0" cellpadding="0" border="0" align="center" width="95%">
+                                <tr>
+                                        <td bgcolor="#ffffff" style="border-collapse:separate;mso-table-lspace:0pt;mso-table-rspace:0pt;width:100%;-webkit-border-top-right-radius: 25px;-webkit-border-top-left-radius: 25px;-moz-border-top-right-radius: 25px;-moz-border-top-left-radius: 25px;border-top-right-radius: 25px;border-top-left-radius: 25px;-webkit-border-bottom-right-radius: 25px;-webkit-border-bottom-left-radius: 25px;-moz-border-bottom-right-radius: 25px;-moz-border-bottom-left-radius: 25px;border-bottom-right-radius: 25px;border-bottom-left-radius: 25px;">
             <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%" align="center" style="border-collapse:separate;mso-table-lspace:0pt;mso-table-rspace:0pt;width:100%;-webkit-border-top-right-radius: 25px;-webkit-border-top-left-radius: 25px;-moz-border-top-right-radius: 25px;-moz-border-top-left-radius: 25px;border-top-right-radius: 25px;border-top-left-radius: 25px;">
                 <tbody>
                   <tr>
@@ -475,9 +484,9 @@ $HTMLmessage = '
                 </tr>
               </tbody>
             </table>
-					</td>
-				</tr>
-			</table>
+                                        </td>
+                                </tr>
+                        </table>
 
       <table role="presentation" cellspacing="0" cellpadding="0" border="0" align="center" width="100%" style="max-width: 680px;">
         <tr>
@@ -490,12 +499,12 @@ $HTMLmessage = '
         </tr>
       </table>
 
-			<!--[if mso]>
-			</td>
-			</tr>
-			</table>
-			<![endif]-->
-		</div>
+                        <!--[if mso]>
+                        </td>
+                        </tr>
+                        </table>
+                        <![endif]-->
+                </div>
 
     </center>
 </body>
@@ -506,23 +515,36 @@ $mail = new PHPMailer;
 //$mail->SMTPDebug = 3; // Enable verbose debug output
 $mail->CharSet = 'UTF-8';
 $mail->isSMTP();
-$mailserver = explode(':',$nems['resource']['USER7']);
-$mail->Host = $mailserver[0]; 
-$mail->Port = $mailserver[1];
+
+$user7    = $nems['resource']['USER7'] ?? '';
+$user5    = $nems['resource']['USER5'] ?? '';
+$user9    = $nems['resource']['USER9'] ?? '';
+$user10   = $nems['resource']['USER10'] ?? '';
+$user15   = $nems['resource']['USER15'] ?? null;
+
+$mailserver = explode(':', $user7);
+$mailserver_host = $mailserver[0] ?? '';
+$mailserver_port = $mailserver[1] ?? '';
+
+$mail->Host = $mailserver_host;
+$mail->Port = $mailserver_port;
+
 // NEMS00002 if user has an empty username, treat as no SMTP auth
-if (strlen($nems['resource']['USER9']) > 0 && strtoupper($nems['resource']['USER9']) != 'NULL') {
-  $mail->SMTPAuth = true;
-  $mail->Username = $nems['resource']['USER9'];
-  $mail->Password = $nems['resource']['USER10'];
+if (strlen($user9) > 0 && strtoupper((string)$user9) != 'NULL') {
+    $mail->SMTPAuth = true;
+    $mail->Username = $user9;
+    $mail->Password = $user10;
 } else {
-  $mail->SMTPAuth = false;
+    $mail->SMTPAuth = false;
 }
-if ($nems['resource']['USER15'] == 1 || !isset($nems['resource']['USER15'])) {
-  $mail->SMTPSecure = 'tls';
+
+if ($user15 == 1 || $user15 === null) {
+    $mail->SMTPSecure = 'tls';
 } else {
-  $mail->SMTPSecure = false;
-  $mail->SMTPAutoTLS = false;
+    $mail->SMTPSecure = false;
+    $mail->SMTPAutoTLS = false;
 }
+
 $mail->SMTPOptions = array(
     'ssl' => array(
         'verify_peer' => false,
@@ -531,9 +553,11 @@ $mail->SMTPOptions = array(
     )
 );
 
-$mail->From = $nems['resource']['USER5'];
+$mail->From = $user5;
 $mail->FromName = $nems['alias'];
-$mail->addAddress($f_to); // Add a recipient + Name is optional "$mail->addAddress('joe@example.net', 'Joe User');"
+if (strlen($f_to) > 0) {
+    $mail->addAddress($f_to);
+}
 $mail->isHTML(true); // Set email format to HTML
 $mail->WordWrap = 50; // Set word wrap to 50 characters
 
@@ -541,33 +565,33 @@ $mail->Subject = '*** '.($f_notify_type_friendly ?: $f_notify_type).': '.$f_host
 $mail->AltBody = $message;
 $mail->Body = $HTMLmessage;
 
-if(!$mail->send()) {
+if (!$mail->send()) {
 
-        $plaintext = '[' . date('r') . '] ' . ($f_notify_type_friendly ?: $f_notify_type).': '.$f_host_name.' is '.$f_host_state . PHP_EOL;
-        file_put_contents('/tmp/email_failure.tmp',$plaintext,FILE_APPEND); // Save failed sends to this log so we can re-send them later
+    $plaintext = '[' . date('r') . '] ' . ($f_notify_type_friendly ?: $f_notify_type).': '.$f_host_name.' is '.$f_host_state . PHP_EOL;
+    @file_put_contents('/tmp/email_failure.tmp', $plaintext, FILE_APPEND); // Save failed sends to this log quietly
 
-	echo 'Message could not be sent.' . PHP_EOL;
-	echo 'Mailer Error: ' . $mail->ErrorInfo . PHP_EOL;
-	$error = '[' . strtotime('now') . '] NEMS EMAILER: ' . $mail->ErrorInfo . PHP_EOL;
-        if (!@file_put_contents('/var/log/nagios/nagios.log',$error,FILE_APPEND)) {
-          echo 'Could not save log as you are not running as a privileged user.' . PHP_EOL . 'Next time use sudo if this matters to you.';
-          echo PHP_EOL . $error . PHP_EOL;
-        }
+    echo 'Message could not be sent.' . PHP_EOL;
+    echo 'Mailer Error: ' . $mail->ErrorInfo . PHP_EOL;
+    $error = '[' . strtotime('now') . '] NEMS EMAILER: ' . $mail->ErrorInfo . PHP_EOL;
+    if (!@file_put_contents('/var/log/nagios/nagios.log', $error, FILE_APPEND)) {
+        echo 'Could not save log as you are not running as a privileged user.' . PHP_EOL . 'Next time use sudo if this matters to you.';
+        echo PHP_EOL . $error . PHP_EOL;
+    }
 } else {
-	echo 'Message has been sent' . PHP_EOL;
-	if (file_exists('/tmp/email_failure.tmp')) {
-          echo 'Sending email of previous failed notifications... ';
-          $email_failures = file_get_contents('/tmp/email_failure.tmp');
-          $email_failure_created = filectime('/tmp/email_failure.tmp');
-          $mail->AltBody = $nems['alias'] . ' has been unable to send email since ' . date('r', $email_failure_created) . '. Here are the notifications that attempted to send since that time:' . PHP_EOL . PHP_EOL . $email_failures;
-          $mail->Body = '<b>' . $nems['alias'] . '</b> has been unable to send email since ' . date('r', $email_failure_created) . '. Here are the notifications that attempted to send since that time:<br /><br />' . nl2br($email_failures);
-	  if ($mail-send()) {
+    echo 'Message has been sent' . PHP_EOL;
+    if (file_exists('/tmp/email_failure.tmp')) {
+        echo 'Sending email of previous failed notifications... ';
+        $email_failures = file_get_contents('/tmp/email_failure.tmp');
+        $email_failure_created = filectime('/tmp/email_failure.tmp');
+        $mail->AltBody = $nems['alias'] . ' has been unable to send email since ' . date('r', $email_failure_created) . '. Here are the notifications that attempted to send since that time:' . PHP_EOL . PHP_EOL . $email_failures;
+        $mail->Body = '<b>' . $nems['alias'] . '</b> has been unable to send email since ' . date('r', $email_failure_created) . '. Here are the notifications that attempted to send since that time:<br /><br />' . nl2br($email_failures);
+        if ($mail->send()) {
             echo 'Success.' . PHP_EOL;
-            unlink('/tmp/email_failure.tmp'); // Sent, so we'll delete this temporary file.
-          } else {
+            @unlink('/tmp/email_failure.tmp'); // Sent, so delete temporary file safely.
+        } else {
             echo 'Failed to send.' . PHP_EOL;
-          }
         }
+    }
 }
 
 ?>
