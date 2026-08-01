@@ -4,6 +4,9 @@ set -e
 chown -R nagios:nagios /etc/check_wmi_plus
 java -cp /usr/lib/nagios/plugins/ibmi/nagios4i.jar com.ibm.nagios.config.Initialization
 
+# Need to fix ownership of the plugins we place
+chown -R root:root /usr/lib/nagios/plugins/
+
 # The monit config file is included in nems-scripts
 # Restart in case anything changed
 /bin/systemctl restart monit
