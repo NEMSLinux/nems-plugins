@@ -1,0 +1,7 @@
+#!/bin/bash
+
+# check_ssl_cert
+LATEST_TAG=$(curl -s https://api.github.com/repos/matteocorti/check_ssl_cert/releases/latest | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')
+TARGET="debpack/usr/lib/nagios/plugins/check_ssl_cert"
+wget "https://raw.githubusercontent.com/matteocorti/check_ssl_cert/${LATEST_TAG}/check_ssl_cert" -O ${TARGET}
+chmod +x ${TARGET}
